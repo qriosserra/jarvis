@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: jarvis
+      POSTGRES_DB: jarvis
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  jarvis:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - pnpm-store:/app/.pnpm-store
+    entrypoint: ["sh", "-c", "pnpm config set store-dir /app/.pnpm-store && pnpm install --frozen-lockfile && exec pnpm run dev"]
+    env_file:
+      - .env
+    environment:
+      - CI=true
+      - DATABASE_URL=postgresql://jarvis:jarvis@postgres:5432/jarvis
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  pnpm-store:
+  node_modules:
