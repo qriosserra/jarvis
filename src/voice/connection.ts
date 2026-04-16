@@ -142,7 +142,7 @@ function setupReceive(
 
     // Skip self
     const container = getContainer();
-    const botId = container.discord.user?.id;
+    const botId = container.discord?.user?.id;
     if (userId === botId) return;
 
     logger.debug({ guildId, userId }, 'Speaker started, creating pipeline');

@@ -188,7 +188,7 @@ describe('text flow — deterministic action (rename)', () => {
       channels: { cache: { get: vi.fn(), find: vi.fn(), filter: vi.fn() } },
     };
 
-    container.discord.guilds.fetch = vi.fn(async () => guild) as any;
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
     container.providers = stubProviderRouter({ llm });
     setContainer(container);
 
@@ -252,7 +252,7 @@ describe('text flow — deterministic action persistence', () => {
       channels: { cache: { get: vi.fn(), find: vi.fn(), filter: vi.fn() } },
     };
 
-    container.discord.guilds.fetch = vi.fn(async () => guild) as any;
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
     container.providers = stubProviderRouter({ llm });
     setContainer(container);
 
@@ -323,7 +323,7 @@ describe('text flow — deterministic action persistence', () => {
       throw new Error('DB connection lost');
     }) as any;
 
-    container.discord.guilds.fetch = vi.fn(async () => guild) as any;
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
     container.providers = stubProviderRouter({ llm });
     setContainer(container);
 

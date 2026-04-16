@@ -33,7 +33,7 @@ describe('discord failures — guild fetch fails', () => {
       } satisfies LlmResponse),
     });
 
-    container.discord.guilds.fetch = vi.fn(async () => {
+    container.discord!.guilds.fetch = vi.fn(async () => {
       throw new Error('Unknown Guild');
     }) as any;
     container.providers = stubProviderRouter({ llm });
@@ -66,7 +66,7 @@ describe('discord failures — message reply fails, falls back to channel send',
     });
 
     const channelSend = vi.fn(async () => ({}));
-    container.discord.channels.fetch = vi.fn(async () => ({
+    container.discord!.channels.fetch = vi.fn(async () => ({
       id: 'ch-1',
       send: channelSend,
     })) as any;
@@ -159,7 +159,7 @@ describe('discord failures — action handler permission denied', () => {
       channels: { cache: { get: vi.fn(), find: vi.fn(), filter: vi.fn() } },
     };
 
-    container.discord.guilds.fetch = vi.fn(async () => guild) as any;
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
     container.providers = stubProviderRouter({ llm });
     setContainer(container);
 
@@ -223,7 +223,7 @@ describe('discord failures — rename blocked for server owner', () => {
       channels: { cache: { get: vi.fn(), find: vi.fn(), filter: vi.fn() } },
     };
 
-    container.discord.guilds.fetch = vi.fn(async () => guild) as any;
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
     container.providers = stubProviderRouter({ llm });
     setContainer(container);
 

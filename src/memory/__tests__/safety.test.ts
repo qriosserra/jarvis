@@ -34,6 +34,7 @@ function fakeAlias(overrides?: Partial<IdentityAlias>): IdentityAlias {
   return {
     id: 'a1',
     memberId: 'u2',
+    membershipId: null,
     guildId: 'g1',
     aliasType: 'preferred_name',
     value: 'Bob',

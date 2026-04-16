@@ -45,7 +45,7 @@ async function onMessageCreate(message: Message): Promise<void> {
   if (!message.member) return;
 
   const container = getContainer();
-  const botUserId = container.discord.user?.id;
+  const botUserId = container.discord?.user?.id;
   if (!botUserId) return;
 
   const detection = detectTextRequest(message, botUserId);
@@ -89,7 +89,7 @@ async function onMessageCreate(message: Message): Promise<void> {
 
 function onVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): void {
   const container = getContainer();
-  const botId = container.discord.user?.id;
+  const botId = container.discord?.user?.id;
   if (!botId) return;
 
   // Only interested in our own voice state changes

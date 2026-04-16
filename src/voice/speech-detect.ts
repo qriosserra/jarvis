@@ -3,7 +3,7 @@ import type { SpeakerUtterance } from './types.js';
 import type { InteractionContext } from '../interaction/types.js';
 import { handleInteraction } from '../interaction/orchestrator.js';
 import { runWithCorrelationId, getCorrelationId } from '../lib/correlation.js';
-import { getContainer } from '../container.js';
+import { getContainer, getDiscordClient } from '../container.js';
 import { createLogger } from '../lib/logger.js';
 
 const logger = createLogger('speech-detect');
@@ -86,8 +86,7 @@ export async function attributeSpeaker(
   guildId: string,
 ): Promise<GuildMember | null> {
   try {
-    const container = getContainer();
-    const guild = await container.discord.guilds.fetch(guildId);
+    const guild = await getDiscordClient().guilds.fetch(guildId);
     const member = await guild.members.fetch(userId);
     return member ?? null;
   } catch (err) {
