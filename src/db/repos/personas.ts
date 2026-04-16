@@ -16,7 +16,7 @@ export class PersonaRepo {
     isDefault?: boolean;
   }): Promise<Persona> {
     const { rows } = await this.pool.query<Persona>(
-      `INSERT INTO personas (name, description, system_prompt, response_style, is_default)
+      `INSERT INTO persona (name, description, system_prompt, response_style, is_default)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING ${COLUMNS}`,
       [
@@ -32,7 +32,7 @@ export class PersonaRepo {
 
   async findByName(name: string): Promise<Persona | null> {
     const { rows } = await this.pool.query<Persona>(
-      `SELECT ${COLUMNS} FROM personas WHERE name = $1`,
+      `SELECT ${COLUMNS} FROM persona WHERE name = $1`,
       [name],
     );
     return rows[0] ?? null;
@@ -40,14 +40,14 @@ export class PersonaRepo {
 
   async findDefault(): Promise<Persona | null> {
     const { rows } = await this.pool.query<Persona>(
-      `SELECT ${COLUMNS} FROM personas WHERE is_default = true LIMIT 1`,
+      `SELECT ${COLUMNS} FROM persona WHERE is_default = true LIMIT 1`,
     );
     return rows[0] ?? null;
   }
 
   async list(): Promise<Persona[]> {
     const { rows } = await this.pool.query<Persona>(
-      `SELECT ${COLUMNS} FROM personas ORDER BY name`,
+      `SELECT ${COLUMNS} FROM persona ORDER BY name`,
     );
     return rows;
   }

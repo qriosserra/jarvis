@@ -112,7 +112,7 @@ async function main(): Promise<void> {
       try {
         const personaName = config!.persona.default;
         const { rows } = await pool.query(
-          'SELECT id, name FROM personas WHERE name = $1',
+          'SELECT id, name FROM persona WHERE name = $1',
           [personaName],
         );
         if (rows.length === 0) {

@@ -9,6 +9,8 @@ export interface LlmResponse {
   content: string;
   model: string;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  /** Server-side processing time reported by the provider (ms), if available. */
+  providerDurationMs?: number;
 }
 
 export interface LlmProvider {
@@ -93,6 +95,8 @@ export interface ResearchProvider {
 export interface EmbeddingResult {
   embedding: number[];
   model: string;
+  /** Server-side processing time reported by the provider (ms), if available. */
+  providerDurationMs?: number;
 }
 
 export interface EmbeddingProvider {

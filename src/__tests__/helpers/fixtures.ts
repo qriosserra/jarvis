@@ -144,7 +144,7 @@ export function stubRepos(): Repos {
     embeddings: {
       create: vi.fn(async () => ({})),
     } as any,
-    operationLatencies: {
+    operationLog: {
       create: vi.fn(async (data: any) => ({ id: 'ol-1', ...data })),
       finalize: vi.fn(async () => {}),
     } as any,
@@ -308,7 +308,7 @@ export function stubMessage(overrides?: Partial<{
 
 export function stubContainer(overrides?: Partial<Container>): Container {
   const repos = overrides?.repos ?? stubRepos();
-  setLatencyRepoAccessor(() => repos.operationLatencies);
+  setLatencyRepoAccessor(() => repos.operationLog);
   return {
     config: stubConfig(),
     discord: stubDiscordClient(),

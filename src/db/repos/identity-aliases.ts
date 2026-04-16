@@ -25,20 +25,20 @@ export class IdentityAliasRepo {
 
     const { rows } = await this.pool.query<IdentityAlias>(
       `WITH existing AS (
-         SELECT id FROM identity_aliases
+         SELECT id FROM identity_alias
          WHERE member_id = $1
            AND COALESCE(guild_id, '__global__') = COALESCE($2, '__global__')
            AND alias_type = $3
        ),
        ins AS (
-         INSERT INTO identity_aliases (member_id, guild_id, alias_type, value, source, confidence, confirmed, membership_id)
+         INSERT INTO identity_alias (member_id, guild_id, alias_type, value, source, confidence, confirmed, membership_id)
          SELECT $1, $2, $3, $4, $5, $6, $7, $8
          WHERE NOT EXISTS (SELECT 1 FROM existing)
          RETURNING ${COLUMNS}
        ),
        upd AS (
-         UPDATE identity_aliases
-         SET value = $4, source = $5, confidence = $6, confirmed = $7, membership_id = COALESCE($8, identity_aliases.membership_id), updated_at = now()
+         UPDATE identity_alias
+         SET value = $4, source = $5, confidence = $6, confirmed = $7, membership_id = COALESCE($8, identity_alias.membership_id), updated_at = now()
          WHERE id = (SELECT id FROM existing)
          RETURNING ${COLUMNS}
        )
@@ -67,7 +67,7 @@ export class IdentityAliasRepo {
     }
 
     const { rows } = await this.pool.query<IdentityAlias>(
-      `SELECT ${COLUMNS} FROM identity_aliases
+      `SELECT ${COLUMNS} FROM identity_alias
        WHERE ${conditions.join(' AND ')}
        ORDER BY confirmed DESC, confidence DESC, updated_at DESC`,
       params,
@@ -85,7 +85,7 @@ export class IdentityAliasRepo {
     }
 
     const { rows } = await this.pool.query<IdentityAlias>(
-      `SELECT ${COLUMNS} FROM identity_aliases
+      `SELECT ${COLUMNS} FROM identity_alias
        WHERE ${conditions.join(' AND ')}
        ORDER BY updated_at DESC`,
       params,

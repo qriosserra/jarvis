@@ -10,6 +10,7 @@ import {
 import type { TtsProvider, TtsResult } from '../providers/types.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation } from '../lib/latency-tracker.js';
+import { OperationName, OperationType } from '../lib/operation-constants.js';
 import {
   ttsLatency,
   voiceAckLatency,
@@ -77,8 +78,8 @@ export async function speak(
 ): Promise<LatencyInfo> {
   const { result: ttsResult, durationMs: synthMs } = await trackOperation(
     {
-      operationName: 'tts_synthesis',
-      operationType: 'tts',
+      operationName: OperationName.TTS_SYNTHESIS,
+      operationType: OperationType.TTS,
       providerName: ttsProvider.name,
       metadata: { textLength: text.length, guildId },
     },

@@ -8,7 +8,7 @@ export class UserRepo {
 
   async upsert(data: { id: string; username: string }): Promise<User> {
     const { rows } = await this.pool.query<User>(
-      `INSERT INTO users (id, username)
+      `INSERT INTO "user" (id, username)
        VALUES ($1, $2)
        ON CONFLICT (id) DO UPDATE SET username = $2, updated_at = now()
        RETURNING ${COLUMNS}`,
@@ -19,7 +19,7 @@ export class UserRepo {
 
   async findById(id: string): Promise<User | null> {
     const { rows } = await this.pool.query<User>(
-      `SELECT ${COLUMNS} FROM users WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM "user" WHERE id = $1`,
       [id],
     );
     return rows[0] ?? null;

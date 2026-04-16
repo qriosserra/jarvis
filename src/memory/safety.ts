@@ -158,7 +158,7 @@ async function findMatchingAliases(
   // match. This is a best-effort check.
   //
   // A full implementation would query:
-  //   SELECT * FROM identity_aliases
+  //   SELECT * FROM identity_alias
   //   WHERE (guild_id = $1 OR guild_id IS NULL)
   //     AND lower(value) LIKE lower($2)
   //

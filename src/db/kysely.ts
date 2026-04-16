@@ -120,7 +120,7 @@ export interface EmbeddingsTable {
   createdAt: Generated<Date>;
 }
 
-export interface OperationLatenciesTable {
+export interface OperationLogTable {
   id: Generated<string>; // UUID
   interactionId: string | null;
   correlationId: string | null;
@@ -134,6 +134,7 @@ export interface OperationLatenciesTable {
   model: string | null;
   status: string;
   durationMs: number | null;
+  providerDurationMs: number | null;
   startedAt: Date;
   metadata: Generated<unknown>; // JSONB, default '{}'
   createdAt: Generated<Date>;
@@ -147,18 +148,18 @@ export interface MigrationsTable {
 // ── Aggregate database interface ────────────────────────────────────
 
 export interface Database {
-  guilds: GuildsTable;
-  members: MembersTable;
-  users: UsersTable;
-  guild_memberships: GuildMembershipsTable;
-  personas: PersonasTable;
-  interactions: InteractionsTable;
-  memory_records: MemoryRecordsTable;
-  identity_aliases: IdentityAliasesTable;
-  action_outcomes: ActionOutcomesTable;
-  embeddings: EmbeddingsTable;
-  operation_latencies: OperationLatenciesTable;
-  _migrations: MigrationsTable;
+  guild: GuildsTable;
+  member: MembersTable;
+  user: UsersTable;
+  guild_membership: GuildMembershipsTable;
+  persona: PersonasTable;
+  interaction: InteractionsTable;
+  memory_record: MemoryRecordsTable;
+  identity_alias: IdentityAliasesTable;
+  action_outcome: ActionOutcomesTable;
+  embedding: EmbeddingsTable;
+  operation_log: OperationLogTable;
+  _migration: MigrationsTable;
 }
 
 // ── Factory ─────────────────────────────────────────────────────────

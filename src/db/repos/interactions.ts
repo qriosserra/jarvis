@@ -23,7 +23,7 @@ export class InteractionRepo {
     correlationId?: string | null;
   }): Promise<Interaction> {
     const { rows } = await this.pool.query<Interaction>(
-      `INSERT INTO interactions (guild_id, member_id, membership_id, channel_id, surface,
+      `INSERT INTO interaction (guild_id, member_id, membership_id, channel_id, surface,
                                  request_text, response_text, persona_id, language, correlation_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${COLUMNS}`,
@@ -45,7 +45,7 @@ export class InteractionRepo {
 
   async updateResponse(id: string, responseText: string): Promise<void> {
     await this.pool.query(
-      `UPDATE interactions SET response_text = $2 WHERE id = $1`,
+      `UPDATE interaction SET response_text = $2 WHERE id = $1`,
       [id, responseText],
     );
   }
@@ -64,12 +64,12 @@ export class InteractionRepo {
     if (data.language !== undefined) { sets.push(`language = $${idx++}`); vals.push(data.language); }
 
     if (sets.length === 0) return;
-    await this.pool.query(`UPDATE interactions SET ${sets.join(', ')} WHERE id = $1`, vals);
+    await this.pool.query(`UPDATE interaction SET ${sets.join(', ')} WHERE id = $1`, vals);
   }
 
   async findById(id: string): Promise<Interaction | null> {
     const { rows } = await this.pool.query<Interaction>(
-      `SELECT ${COLUMNS} FROM interactions WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM interaction WHERE id = $1`,
       [id],
     );
     return rows[0] ?? null;
@@ -96,7 +96,7 @@ export class InteractionRepo {
     conditions.push(`TRUE`); // no-op placeholder for simpler query building
 
     const { rows } = await this.pool.query<Interaction>(
-      `SELECT ${COLUMNS} FROM interactions
+      `SELECT ${COLUMNS} FROM interaction
        WHERE ${conditions.join(' AND ')}
        ORDER BY created_at DESC
        LIMIT ${limit}`,

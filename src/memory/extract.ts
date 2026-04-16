@@ -4,6 +4,7 @@ import type { MemoryCategory } from '../db/types.js';
 import { getContainer } from '../container.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation } from '../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 
 const logger = createLogger('memory-extract');
 
@@ -73,8 +74,8 @@ export async function extractMemories(
 
     const { result } = await trackOperation(
       {
-        operationName: 'llm_memory_extraction',
-        operationType: 'llm',
+        operationName: OperationName.LLM_MEMORY_EXTRACTION,
+        operationType: OperationType.LLM,
         providerName: provider.name,
         model,
         context: {
@@ -83,9 +84,14 @@ export async function extractMemories(
           memberId: ctx.requester.id,
           interactionId: ctx.interactionId,
         },
-        metadata: { task: 'memory_extraction', intentKind },
+        metadata: { task: OperationMetadata.Task.MEMORY_EXTRACTION, intentKind },
       },
       () => provider.complete(messages, { model, temperature: 0.2, maxTokens: 512 }),
+      (resp) => ({
+        providerDurationMs: resp.providerDurationMs ?? null,
+        inputTokens: resp.usage?.promptTokens ?? null,
+        outputTokens: resp.usage?.completionTokens ?? null,
+      }),
     );
 
     const memories = parseExtractedMemories(result.content);

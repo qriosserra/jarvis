@@ -13,6 +13,12 @@ const logger = createLogger('provider:xai');
 
 const XAI_BASE_URL = 'https://api.x.ai';
 
+function parseHeaderMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 // ── LLM Provider ─────────────────────────────────────────────────────
 
 export class XaiLlmProvider implements LlmProvider {
@@ -71,6 +77,7 @@ export class XaiLlmProvider implements LlmProvider {
             totalTokens: json.usage.total_tokens,
           }
         : undefined,
+      providerDurationMs: parseHeaderMs(res.headers.get('x-metrics-e2e-ms')),
     };
   }
 }
@@ -128,9 +135,11 @@ export class XaiEmbeddingProvider implements EmbeddingProvider {
     // Sort by index to preserve input order
     const sorted = [...json.data].sort((a, b) => a.index - b.index);
 
+    const providerDurationMs = parseHeaderMs(res.headers.get('x-metrics-e2e-ms'));
     return sorted.map((d) => ({
       embedding: d.embedding,
       model: json.model,
+      providerDurationMs,
     }));
   }
 }

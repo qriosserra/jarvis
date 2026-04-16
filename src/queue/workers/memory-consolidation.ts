@@ -7,6 +7,7 @@ import { MemoryRecordRepo } from '../../db/repos.js';
 import type { Database } from '../../db/kysely.js';
 import { queueJobCounter, queueJobDuration } from '../../lib/metrics.js';
 import { trackOperation } from '../../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../../lib/operation-constants.js';
 
 const logger = createLogger('worker:memory-consolidation');
 
@@ -35,10 +36,10 @@ export function startMemoryConsolidationWorker(
       // Phase 1: clean up expired records
       const { result: deleted } = await trackOperation(
         {
-          operationName: 'memory_delete_expired',
-          operationType: 'db',
+          operationName: OperationName.MEMORY_DELETE_EXPIRED,
+          operationType: OperationType.DB,
           context: { guildId, memberId },
-          metadata: { queue: 'memory-consolidation' },
+          metadata: { queue: OperationMetadata.Queue.MEMORY_CONSOLIDATION },
         },
         () => repo.deleteExpired(),
       );

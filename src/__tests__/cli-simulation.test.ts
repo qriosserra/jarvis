@@ -247,6 +247,104 @@ describe('CLI simulation — deterministic action simulation', () => {
   });
 });
 
+// ── backgroundTasks / skipMemoryPersistence ───────────────────────────
+
+describe('CLI simulation — background task collection', () => {
+  it('collects memory persistence into backgroundTasks for conversational flow', async () => {
+    const llm = stubLlmProvider({
+      complete: vi.fn()
+        .mockResolvedValueOnce({
+          content: '{"kind":"respond"}',
+          model: 'stub',
+        } satisfies LlmResponse)
+        .mockResolvedValueOnce({
+          content: 'Collected reply.',
+          model: 'stub',
+        } satisfies LlmResponse)
+        .mockResolvedValueOnce({
+          content: '[]',
+          model: 'stub',
+        } satisfies LlmResponse),
+    });
+
+    container.providers = stubProviderRouter({ llm });
+    setContainer(container);
+
+    const replies: string[] = [];
+    const ctx = fakeInteractionContext({
+      requestText: 'hello',
+      backgroundTasks: [],
+      replyHandler: (text: string) => { replies.push(text); },
+    });
+
+    await handleInteraction(ctx);
+
+    expect(replies[0]).toBe('Collected reply.');
+    // Memory persistence promise was pushed (not fire-and-forget)
+    expect(ctx.backgroundTasks!.length).toBeGreaterThanOrEqual(1);
+    // All tasks should settle without throwing
+    await expect(Promise.allSettled(ctx.backgroundTasks!)).resolves.toBeDefined();
+  });
+
+  it('collects memory persistence into backgroundTasks for deterministic actions', async () => {
+    const llm = stubLlmProvider({
+      complete: vi.fn().mockResolvedValueOnce({
+        content: '{"kind":"rename-member","targetRef":"alice","newName":"Ally"}',
+        model: 'stub',
+      } satisfies LlmResponse),
+    });
+
+    container.providers = stubProviderRouter({ llm });
+    setContainer(container);
+
+    const replies: string[] = [];
+    const ctx = fakeInteractionContext({
+      requestText: 'rename alice to Ally',
+      simulateActions: true,
+      backgroundTasks: [],
+      replyHandler: (text: string) => { replies.push(text); },
+    });
+
+    await handleInteraction(ctx);
+
+    expect(ctx.backgroundTasks!.length).toBeGreaterThanOrEqual(1);
+    await expect(Promise.allSettled(ctx.backgroundTasks!)).resolves.toBeDefined();
+  });
+
+  it('skips memory persistence entirely when skipMemoryPersistence is true', async () => {
+    const llm = stubLlmProvider({
+      complete: vi.fn()
+        .mockResolvedValueOnce({
+          content: '{"kind":"respond"}',
+          model: 'stub',
+        } satisfies LlmResponse)
+        .mockResolvedValueOnce({
+          content: 'No memory.',
+          model: 'stub',
+        } satisfies LlmResponse),
+    });
+
+    container.providers = stubProviderRouter({ llm });
+    setContainer(container);
+
+    const replies: string[] = [];
+    const ctx = fakeInteractionContext({
+      requestText: 'hello',
+      backgroundTasks: [],
+      skipMemoryPersistence: true,
+      replyHandler: (text: string) => { replies.push(text); },
+    });
+
+    await handleInteraction(ctx);
+
+    expect(replies[0]).toBe('No memory.');
+    // No memory extraction LLM call → only 2 calls (interpretation + response)
+    expect(llm.complete).toHaveBeenCalledTimes(2);
+    // No background tasks were queued
+    expect(ctx.backgroundTasks).toHaveLength(0);
+  });
+});
+
 // ── Headless container (no Discord client) ───────────────────────────
 
 describe('CLI simulation — headless container', () => {

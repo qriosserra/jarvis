@@ -1,5 +1,5 @@
-import type { OperationLatency, OperationStatus } from '../db/types.js';
-import type { OperationLatencyRepo, CreateOperationLatencyData } from '../db/repos.js';
+import type { OperationLog, OperationStatus } from '../db/types.js';
+import type { OperationLogRepo, CreateOperationLogData } from '../db/repos.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('latency-tracker');
@@ -28,6 +28,12 @@ export interface TrackOptions {
   model?: string;
   /** Contextual identifiers for correlation and attribution. */
   context?: OperationContext;
+  /** Processing time reported by the external API provider (excludes network overhead). */
+  providerDurationMs?: number | null;
+  /** Number of tokens in the request sent to the provider. */
+  inputTokens?: number | null;
+  /** Number of tokens in the response received from the provider. */
+  outputTokens?: number | null;
   /** Arbitrary metadata to store alongside the latency record. */
   metadata?: Record<string, unknown>;
   /**
@@ -50,17 +56,17 @@ export interface TrackedResult<T> {
 
 // ── Repo accessor ────────────────────────────────────────────────────
 
-let _repoAccessor: (() => OperationLatencyRepo | undefined) | undefined;
+let _repoAccessor: (() => OperationLogRepo | undefined) | undefined;
 
 /**
  * Configure how the tracker obtains the repo instance.
  * Called once at startup with a lazy accessor to avoid circular imports.
  */
-export function setLatencyRepoAccessor(accessor: () => OperationLatencyRepo | undefined): void {
+export function setLatencyRepoAccessor(accessor: () => OperationLogRepo | undefined): void {
   _repoAccessor = accessor;
 }
 
-function getRepo(): OperationLatencyRepo | undefined {
+function getRepo(): OperationLogRepo | undefined {
   return _repoAccessor?.();
 }
 
@@ -70,7 +76,7 @@ function getRepo(): OperationLatencyRepo | undefined {
  * Execute an async operation and record its latency.
  *
  * - Emits a structured log with duration and status on completion.
- * - Persists a row in `operation_latencies` (best-effort).
+ * - Persists a row in `operation_log` (best-effort).
  * - Returns the wrapped result plus timing metadata.
  *
  * Persistence failures are swallowed — observability must never
@@ -79,6 +85,7 @@ function getRepo(): OperationLatencyRepo | undefined {
 export async function trackOperation<T>(
   opts: TrackOptions,
   fn: () => Promise<T>,
+  enrich?: (result: T) => { providerDurationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null },
 ): Promise<TrackedResult<T>> {
   const startedAt = new Date();
   const startMs = performance.now();
@@ -96,12 +103,16 @@ export async function trackOperation<T>(
     const result = await fn();
     const durationMs = Math.round(performance.now() - startMs);
 
+    // Merge provider-reported metrics extracted from the result (e.g. response headers).
+    const enrichment = enrich?.(result);
+    const effectiveOpts: TrackOptions = enrichment !== undefined ? { ...opts, ...enrichment } : opts;
+
     let operationId: string | undefined;
     if (twoPhase) {
-      await finalizeRow(opts.operationId!, status, durationMs, opts);
+      await finalizeRow(opts.operationId!, status, durationMs, effectiveOpts);
       operationId = opts.operationId;
     } else {
-      operationId = await persistRecord(opts, status, durationMs, startedAt) ?? opts.operationId;
+      operationId = await persistRecord(effectiveOpts, status, durationMs, startedAt) ?? opts.operationId;
     }
 
     logCompletion(opts, status, durationMs);
@@ -120,6 +131,62 @@ export async function trackOperation<T>(
     logCompletion(opts, status, durationMs, err);
 
     throw err;
+  }
+}
+
+// ── Pipeline runner ──────────────────────────────────────────────────
+
+export interface PipelineRunOptions {
+  /** Broad category shared by every step (e.g. "pipeline"). */
+  operationType: string;
+  /** Contextual identifiers shared by every step. */
+  context?: OperationContext;
+}
+
+/**
+ * Execute a sequence of tracked operations that share the same
+ * `operationType` and `context`.  Each step is awaited in declaration
+ * order; the first failure re-throws immediately and skips remaining
+ * steps.
+ *
+ * Returns the collected results as an ordered array.
+ */
+export async function runTrackedPipeline(
+  opts: PipelineRunOptions,
+  steps: ReadonlyArray<[operationName: string, fn: () => Promise<unknown>]>,
+): Promise<unknown[]> {
+  const results: unknown[] = [];
+  for (const [operationName, fn] of steps) {
+    const { result } = await trackOperation(
+      { operationName, operationType: opts.operationType, context: opts.context },
+      fn,
+    );
+    results.push(result);
+  }
+  return results;
+}
+
+// ── Patch helpers ────────────────────────────────────────────────────
+
+/**
+ * Best-effort update of a previously persisted operation row's
+ * `interaction_id`.  Used when the interaction row is created after the
+ * root operation's running placeholder has already been inserted.
+ */
+export async function patchOperationInteractionId(
+  operationId: string,
+  interactionId: string,
+): Promise<void> {
+  const repo = getRepo();
+  if (!repo) return;
+
+  try {
+    await repo.patchInteractionId(operationId, interactionId);
+  } catch (err) {
+    logger.debug(
+      { operationId, interactionId, err },
+      'Failed to patch operation interaction_id (best-effort)',
+    );
   }
 }
 
@@ -145,7 +212,10 @@ async function insertRunningRow(
       model: opts.model ?? null,
       status: 'running',
       durationMs: null,
+      inputTokens: null,
+      outputTokens: null,
       startedAt,
+      createdAt: new Date(),
       correlationId: opts.context?.correlationId ?? null,
       guildId: opts.context?.guildId ?? null,
       memberId: opts.context?.memberId ?? null,
@@ -178,6 +248,9 @@ async function finalizeRow(
     await repo.finalize(id, status, durationMs, {
       providerName: opts.providerName,
       model: opts.model,
+      providerDurationMs: opts.providerDurationMs,
+      inputTokens: opts.inputTokens,
+      outputTokens: opts.outputTokens,
       metadata: opts.metadata,
     });
   } catch (err) {
@@ -201,7 +274,7 @@ async function persistRecord(
   if (!repo) return undefined;
 
   try {
-    const data: CreateOperationLatencyData = {
+    const data: CreateOperationLogData = {
       ...(opts.operationId ? { id: opts.operationId } : {}),
       operationName: opts.operationName,
       operationType: opts.operationType,
@@ -209,7 +282,11 @@ async function persistRecord(
       model: opts.model ?? null,
       status,
       durationMs,
+      providerDurationMs: opts.providerDurationMs ?? null,
+      inputTokens: opts.inputTokens ?? null,
+      outputTokens: opts.outputTokens ?? null,
       startedAt,
+      createdAt: new Date(),
       correlationId: opts.context?.correlationId ?? null,
       guildId: opts.context?.guildId ?? null,
       memberId: opts.context?.memberId ?? null,

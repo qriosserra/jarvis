@@ -28,7 +28,7 @@ function createMockPool(appliedNames: string[] = []) {
       queries.push({ text, values });
 
       // Return applied migration names for the SELECT query
-      if (typeof text === 'string' && text.includes('SELECT name FROM _migrations')) {
+      if (typeof text === 'string' && text.includes('SELECT name FROM _migration')) {
         return { rows: appliedNames.map((name) => ({ name })) } as unknown as QueryResult;
       }
 
@@ -93,7 +93,7 @@ describe('runMigrations', () => {
     it('rolls back on schema.sql application failure', async () => {
       const failPool = {
         query: vi.fn(async (text: string) => {
-          if (typeof text === 'string' && text.includes('SELECT name FROM _migrations')) {
+          if (typeof text === 'string' && text.includes('SELECT name FROM _migration')) {
             return { rows: [] };
           }
           if (typeof text === 'string' && text === 'CREATE TABLE fail();') {
@@ -131,7 +131,7 @@ describe('runMigrations', () => {
 
       // Should record both filenames
       const insertQueries = queries.filter(
-        (q) => q.text.includes('INSERT INTO _migrations') && q.values,
+        (q) => q.text.includes('INSERT INTO _migration') && q.values,
       );
       expect(insertQueries).toHaveLength(2);
       expect(insertQueries[0].values?.[0]).toBe('001-init.sql');

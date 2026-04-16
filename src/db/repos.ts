@@ -3,7 +3,7 @@ import type { Database } from './kysely.js';
 import type {
   Guild, Member, User, GuildMembership, Persona, Interaction,
   MemoryRecord, IdentityAlias, ActionOutcome, Embedding,
-  OperationLatency, OperationStatus, Surface, MemoryCategory,
+  OperationLog, OperationStatus, Surface, MemoryCategory,
   AliasType, AliasSource,
 } from './types.js';
 
@@ -24,12 +24,12 @@ export class GuildRepo {
   async upsert(data: { id: string; name: string; settings?: Record<string, unknown> }): Promise<Guild> {
     const settings = JSON.stringify(data.settings ?? {});
     const row = await this.db
-      .insertInto('guilds')
+      .insertInto('guild')
       .values({ id: data.id, name: data.name, settings })
       .onConflict((oc) =>
         oc.column('id').doUpdateSet((eb) => ({
           name: eb.val(data.name),
-          settings: sql`COALESCE(${settings}::jsonb, guilds.settings)`,
+          settings: sql`COALESCE(${settings}::jsonb, guild.settings)`,
           updatedAt: sql`now()`,
         })),
       )
@@ -40,7 +40,7 @@ export class GuildRepo {
 
   async findById(id: string): Promise<Guild | null> {
     const row = await this.db
-      .selectFrom('guilds').selectAll()
+      .selectFrom('guild').selectAll()
       .where('id', '=', id)
       .executeTakeFirst();
     return row ? as_<Guild>(row) : null;
@@ -48,7 +48,7 @@ export class GuildRepo {
 
   async list(): Promise<Guild[]> {
     const rows = await this.db
-      .selectFrom('guilds').selectAll()
+      .selectFrom('guild').selectAll()
       .orderBy('joinedAt', 'asc')
       .execute();
     return rows.map(as_<Guild>);
@@ -64,7 +64,7 @@ export class MemberRepo {
     id: string; guildId: string; username: string; displayName?: string | null;
   }): Promise<Member> {
     const row = await this.db
-      .insertInto('members')
+      .insertInto('member')
       .values({
         id: data.id, guildId: data.guildId,
         username: data.username, displayName: data.displayName ?? null,
@@ -72,7 +72,7 @@ export class MemberRepo {
       .onConflict((oc) =>
         oc.columns(['id', 'guildId']).doUpdateSet((eb) => ({
           username: eb.val(data.username),
-          displayName: sql`COALESCE(${data.displayName ?? null}, members.display_name)`,
+          displayName: sql`COALESCE(${data.displayName ?? null}, member.display_name)`,
           updatedAt: sql`now()`,
         })),
       )
@@ -83,7 +83,7 @@ export class MemberRepo {
 
   async findByGuildAndId(guildId: string, memberId: string): Promise<Member | null> {
     const row = await this.db
-      .selectFrom('members').selectAll()
+      .selectFrom('member').selectAll()
       .where('guildId', '=', guildId).where('id', '=', memberId)
       .executeTakeFirst();
     return row ? as_<Member>(row) : null;
@@ -91,7 +91,7 @@ export class MemberRepo {
 
   async listByGuild(guildId: string): Promise<Member[]> {
     const rows = await this.db
-      .selectFrom('members').selectAll()
+      .selectFrom('member').selectAll()
       .where('guildId', '=', guildId).orderBy('username', 'asc')
       .execute();
     return rows.map(as_<Member>);
@@ -105,7 +105,7 @@ export class UserRepo {
 
   async upsert(data: { id: string; username: string }): Promise<User> {
     const row = await this.db
-      .insertInto('users')
+      .insertInto('user')
       .values({ id: data.id, username: data.username })
       .onConflict((oc) =>
         oc.column('id').doUpdateSet((eb) => ({
@@ -120,7 +120,7 @@ export class UserRepo {
 
   async findById(id: string): Promise<User | null> {
     const row = await this.db
-      .selectFrom('users').selectAll()
+      .selectFrom('user').selectAll()
       .where('id', '=', id).executeTakeFirst();
     return row ? as_<User>(row) : null;
   }
@@ -135,14 +135,14 @@ export class GuildMembershipRepo {
     guildId: string; userId: string; displayName?: string | null;
   }): Promise<GuildMembership> {
     const row = await this.db
-      .insertInto('guild_memberships')
+      .insertInto('guild_membership')
       .values({
         guildId: data.guildId, userId: data.userId,
         displayName: data.displayName ?? null,
       })
       .onConflict((oc) =>
         oc.columns(['guildId', 'userId']).doUpdateSet(() => ({
-          displayName: sql`COALESCE(${data.displayName ?? null}, guild_memberships.display_name)`,
+          displayName: sql`COALESCE(${data.displayName ?? null}, guild_membership.display_name)`,
           updatedAt: sql`now()`,
         })),
       )
@@ -153,7 +153,7 @@ export class GuildMembershipRepo {
 
   async findByGuildAndUser(guildId: string, userId: string): Promise<GuildMembership | null> {
     const row = await this.db
-      .selectFrom('guild_memberships').selectAll()
+      .selectFrom('guild_membership').selectAll()
       .where('guildId', '=', guildId).where('userId', '=', userId)
       .executeTakeFirst();
     return row ? as_<GuildMembership>(row) : null;
@@ -161,19 +161,19 @@ export class GuildMembershipRepo {
 
   async findById(id: string): Promise<GuildMembership | null> {
     const row = await this.db
-      .selectFrom('guild_memberships').selectAll()
+      .selectFrom('guild_membership').selectAll()
       .where('id', '=', id).executeTakeFirst();
     return row ? as_<GuildMembership>(row) : null;
   }
 
   async listByGuild(guildId: string): Promise<GuildMembership[]> {
-    return (await this.db.selectFrom('guild_memberships').selectAll()
+    return (await this.db.selectFrom('guild_membership').selectAll()
       .where('guildId', '=', guildId).orderBy('createdAt', 'asc').execute())
       .map(as_<GuildMembership>);
   }
 
   async listByUser(userId: string): Promise<GuildMembership[]> {
-    return (await this.db.selectFrom('guild_memberships').selectAll()
+    return (await this.db.selectFrom('guild_membership').selectAll()
       .where('userId', '=', userId).orderBy('createdAt', 'asc').execute())
       .map(as_<GuildMembership>);
   }
@@ -189,7 +189,7 @@ export class PersonaRepo {
     responseStyle?: Record<string, unknown>; isDefault?: boolean;
   }): Promise<Persona> {
     const row = await this.db
-      .insertInto('personas')
+      .insertInto('persona')
       .values({
         name: data.name,
         description: data.description ?? null,
@@ -203,19 +203,19 @@ export class PersonaRepo {
   }
 
   async findByName(name: string): Promise<Persona | null> {
-    const row = await this.db.selectFrom('personas').selectAll()
+    const row = await this.db.selectFrom('persona').selectAll()
       .where('name', '=', name).executeTakeFirst();
     return row ? as_<Persona>(row) : null;
   }
 
   async findDefault(): Promise<Persona | null> {
-    const row = await this.db.selectFrom('personas').selectAll()
+    const row = await this.db.selectFrom('persona').selectAll()
       .where('isDefault', '=', true).executeTakeFirst();
     return row ? as_<Persona>(row) : null;
   }
 
   async list(): Promise<Persona[]> {
-    return (await this.db.selectFrom('personas').selectAll()
+    return (await this.db.selectFrom('persona').selectAll()
       .orderBy('name', 'asc').execute()).map(as_<Persona>);
   }
 }
@@ -232,7 +232,7 @@ export class InteractionRepo {
     language?: string | null; correlationId?: string | null;
   }): Promise<Interaction> {
     const row = await this.db
-      .insertInto('interactions')
+      .insertInto('interaction')
       .values({
         guildId: data.guildId, memberId: data.memberId,
         membershipId: data.membershipId ?? null,
@@ -249,7 +249,7 @@ export class InteractionRepo {
   }
 
   async updateResponse(id: string, responseText: string): Promise<void> {
-    await this.db.updateTable('interactions')
+    await this.db.updateTable('interaction')
       .set({ responseText }).where('id', '=', id).execute();
   }
 
@@ -261,11 +261,11 @@ export class InteractionRepo {
     if (data.personaId !== undefined) sets.personaId = data.personaId;
     if (data.language !== undefined) sets.language = data.language;
     if (Object.keys(sets).length === 0) return;
-    await this.db.updateTable('interactions').set(sets).where('id', '=', id).execute();
+    await this.db.updateTable('interaction').set(sets).where('id', '=', id).execute();
   }
 
   async findById(id: string): Promise<Interaction | null> {
-    const row = await this.db.selectFrom('interactions').selectAll()
+    const row = await this.db.selectFrom('interaction').selectAll()
       .where('id', '=', id).executeTakeFirst();
     return row ? as_<Interaction>(row) : null;
   }
@@ -274,7 +274,7 @@ export class InteractionRepo {
     guildId: string,
     opts?: { memberId?: string; limit?: number; before?: Date },
   ): Promise<Interaction[]> {
-    let q = this.db.selectFrom('interactions').selectAll()
+    let q = this.db.selectFrom('interaction').selectAll()
       .where('guildId', '=', guildId);
     if (opts?.memberId) q = q.where('memberId', '=', opts.memberId);
     if (opts?.before) q = q.where('createdAt', '<', opts.before);
@@ -294,7 +294,7 @@ export class MemoryRecordRepo {
     confidence?: number; sourceInteractionId?: string | null; expiresAt?: Date | null;
   }): Promise<MemoryRecord> {
     const row = await this.db
-      .insertInto('memory_records')
+      .insertInto('memory_record')
       .values({
         guildId: data.guildId, memberId: data.memberId ?? null,
         membershipId: data.membershipId ?? null,
@@ -310,7 +310,7 @@ export class MemoryRecordRepo {
   }
 
   async findById(id: string): Promise<MemoryRecord | null> {
-    const row = await this.db.selectFrom('memory_records').selectAll()
+    const row = await this.db.selectFrom('memory_record').selectAll()
       .where('id', '=', id).executeTakeFirst();
     return row ? as_<MemoryRecord>(row) : null;
   }
@@ -319,7 +319,7 @@ export class MemoryRecordRepo {
     guildId: string,
     opts?: { memberId?: string; category?: MemoryCategory; capability?: string; limit?: number },
   ): Promise<MemoryRecord[]> {
-    let q = this.db.selectFrom('memory_records').selectAll()
+    let q = this.db.selectFrom('memory_record').selectAll()
       .where('guildId', '=', guildId)
       .where(sql<SqlBool>`(expires_at IS NULL OR expires_at > now())`);
     if (opts?.memberId) q = q.where('memberId', '=', opts.memberId);
@@ -330,13 +330,13 @@ export class MemoryRecordRepo {
   }
 
   async updateConfidence(id: string, confidence: number): Promise<void> {
-    await this.db.updateTable('memory_records')
+    await this.db.updateTable('memory_record')
       .set({ confidence, updatedAt: sql`now()` })
       .where('id', '=', id).execute();
   }
 
   async deleteExpired(): Promise<number> {
-    const result = await this.db.deleteFrom('memory_records')
+    const result = await this.db.deleteFrom('memory_record')
       .where('expiresAt', 'is not', null)
       .where(sql<SqlBool>`expires_at <= now()`)
       .executeTakeFirst();
@@ -364,13 +364,13 @@ export class IdentityAliasRepo {
     // unique index match (member_id, COALESCE(guild_id, '__global__'), alias_type).
     const { rows } = await sql<IdentityAlias>`
       WITH existing AS (
-        SELECT id FROM identity_aliases
+        SELECT id FROM identity_alias
         WHERE member_id = ${data.memberId}
           AND COALESCE(guild_id, '__global__') = COALESCE(${guildId}, '__global__')
           AND alias_type = ${data.aliasType}
       ),
       ins AS (
-        INSERT INTO identity_aliases (member_id, guild_id, alias_type, value, source, confidence, confirmed, membership_id)
+        INSERT INTO identity_alias (member_id, guild_id, alias_type, value, source, confidence, confirmed, membership_id)
         SELECT ${data.memberId}, ${guildId}, ${data.aliasType}, ${data.value}, ${data.source}, ${confidence}, ${confirmed}, ${membershipId}
         WHERE NOT EXISTS (SELECT 1 FROM existing)
         RETURNING id, member_id AS "memberId", membership_id AS "membershipId",
@@ -379,10 +379,10 @@ export class IdentityAliasRepo {
           created_at AS "createdAt", updated_at AS "updatedAt"
       ),
       upd AS (
-        UPDATE identity_aliases
+        UPDATE identity_alias
         SET value = ${data.value}, source = ${data.source}, confidence = ${confidence},
             confirmed = ${confirmed},
-            membership_id = COALESCE(${membershipId}, identity_aliases.membership_id),
+            membership_id = COALESCE(${membershipId}, identity_alias.membership_id),
             updated_at = now()
         WHERE id = (SELECT id FROM existing)
         RETURNING id, member_id AS "memberId", membership_id AS "membershipId",
@@ -399,7 +399,7 @@ export class IdentityAliasRepo {
     memberId: string,
     opts?: { guildId?: string; aliasType?: AliasType },
   ): Promise<IdentityAlias[]> {
-    let q = this.db.selectFrom('identity_aliases').selectAll()
+    let q = this.db.selectFrom('identity_alias').selectAll()
       .where('memberId', '=', memberId);
     if (opts?.guildId) {
       q = q.where((eb) => eb.or([
@@ -413,7 +413,7 @@ export class IdentityAliasRepo {
   }
 
   async findConfirmedNames(memberId: string, guildId?: string): Promise<IdentityAlias[]> {
-    let q = this.db.selectFrom('identity_aliases').selectAll()
+    let q = this.db.selectFrom('identity_alias').selectAll()
       .where('memberId', '=', memberId).where('confirmed', '=', true);
     if (guildId) {
       q = q.where((eb) => eb.or([
@@ -436,7 +436,7 @@ export class ActionOutcomeRepo {
     targetChannelId?: string | null; success: boolean;
     errorMessage?: string | null; metadata?: Record<string, unknown>;
   }): Promise<ActionOutcome> {
-    const row = await this.db.insertInto('action_outcomes')
+    const row = await this.db.insertInto('action_outcome')
       .values({
         interactionId: data.interactionId, guildId: data.guildId,
         actionType: data.actionType,
@@ -452,7 +452,7 @@ export class ActionOutcomeRepo {
   }
 
   async findByInteraction(interactionId: string): Promise<ActionOutcome[]> {
-    return (await this.db.selectFrom('action_outcomes').selectAll()
+    return (await this.db.selectFrom('action_outcome').selectAll()
       .where('interactionId', '=', interactionId).orderBy('createdAt', 'asc').execute())
       .map(as_<ActionOutcome>);
   }
@@ -460,7 +460,7 @@ export class ActionOutcomeRepo {
   async listByGuild(
     guildId: string, opts?: { actionType?: string; limit?: number },
   ): Promise<ActionOutcome[]> {
-    let q = this.db.selectFrom('action_outcomes').selectAll()
+    let q = this.db.selectFrom('action_outcome').selectAll()
       .where('guildId', '=', guildId);
     if (opts?.actionType) q = q.where('actionType', '=', opts.actionType);
     return (await q.orderBy('createdAt', 'desc').limit(opts?.limit ?? 50).execute())
@@ -478,7 +478,7 @@ export class EmbeddingRepo {
   }): Promise<Embedding> {
     const vectorLiteral = `[${data.embedding.join(',')}]`;
     const { rows } = await sql<Embedding>`
-      INSERT INTO embeddings (memory_record_id, embedding, model)
+      INSERT INTO embedding (memory_record_id, embedding, model)
       VALUES (${data.memoryRecordId}, ${vectorLiteral}::vector, ${data.model})
       ON CONFLICT (memory_record_id) DO UPDATE
         SET embedding = ${vectorLiteral}::vector, model = ${data.model}, created_at = now()
@@ -488,14 +488,14 @@ export class EmbeddingRepo {
   }
 
   async findByMemoryRecordId(memoryRecordId: string): Promise<Embedding | null> {
-    const row = await this.db.selectFrom('embeddings')
+    const row = await this.db.selectFrom('embedding')
       .select(['id', 'memoryRecordId', 'model', 'createdAt'])
       .where('memoryRecordId', '=', memoryRecordId).executeTakeFirst();
     return row ? as_<Embedding>(row) : null;
   }
 
   async deleteByMemoryRecordId(memoryRecordId: string): Promise<void> {
-    await this.db.deleteFrom('embeddings')
+    await this.db.deleteFrom('embedding')
       .where('memoryRecordId', '=', memoryRecordId).execute();
   }
 }
@@ -534,8 +534,8 @@ export class MemoryRetrieval {
              mr.expires_at AS "expiresAt",
              mr.created_at AS "createdAt", mr.updated_at AS "updatedAt",
              1 - (e.embedding <=> ${vectorLiteral}::vector) AS score
-      FROM memory_records mr
-      JOIN embeddings e ON e.memory_record_id = mr.id
+      FROM memory_record mr
+      JOIN embedding e ON e.memory_record_id = mr.id
       WHERE ${where}
         AND e.embedding IS NOT NULL
       ORDER BY e.embedding <=> ${vectorLiteral}::vector ASC
@@ -556,7 +556,7 @@ export class MemoryRetrieval {
              mr.expires_at AS "expiresAt",
              mr.created_at AS "createdAt", mr.updated_at AS "updatedAt",
              mr.confidence AS score
-      FROM memory_records mr
+      FROM memory_record mr
       WHERE ${where}
       ORDER BY mr.created_at DESC
       LIMIT ${lim}
@@ -587,8 +587,8 @@ export class MemoryRetrieval {
                ${vw}::real * (1 - (e.embedding <=> ${vectorLiteral}::vector))
                + ${rw}::real * EXP(-EXTRACT(EPOCH FROM (now() - mr.created_at)) / (86400.0 * ${decay}::real))
              ) AS score
-      FROM memory_records mr
-      JOIN embeddings e ON e.memory_record_id = mr.id
+      FROM memory_record mr
+      JOIN embedding e ON e.memory_record_id = mr.id
       WHERE ${where}
         AND e.embedding IS NOT NULL
       ORDER BY score DESC
@@ -611,9 +611,9 @@ export class MemoryRetrieval {
   }
 }
 
-// ── Operation Latencies ─────────────────────────────────────────────
+// ── Operation Log ────────────────────────────────────────────────────
 
-export interface CreateOperationLatencyData {
+export interface CreateOperationLogData {
   id?: string | null;
   interactionId?: string | null;
   correlationId?: string | null;
@@ -627,45 +627,60 @@ export interface CreateOperationLatencyData {
   model?: string | null;
   status: OperationStatus;
   durationMs?: number | null;
+  providerDurationMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
   startedAt: Date;
+  createdAt: Date;
   metadata?: Record<string, unknown>;
 }
 
-export class OperationLatencyRepo {
+export class OperationLogRepo {
   constructor(private db: Db) {}
 
-  async create(data: CreateOperationLatencyData): Promise<OperationLatency> {
+  async create(data: CreateOperationLogData): Promise<OperationLog> {
     const metadataJson = JSON.stringify(data.metadata ?? {});
-    const { rows } = await sql<OperationLatency>`
-      INSERT INTO operation_latencies (
+    const { rows } = await sql<OperationLog>`
+      INSERT INTO operation_log (
         id, interaction_id, correlation_id, guild_id, member_id, membership_id,
         operation_name, operation_type, parent_operation_id,
-        provider_name, model, status, duration_ms, started_at, metadata
+        provider_name, model, status, duration_ms, provider_duration_ms,
+        input_tokens, output_tokens, started_at, metadata, created_at
       ) VALUES (
         COALESCE(${data.id ?? null}, gen_random_uuid()),
         ${data.interactionId ?? null}, ${data.correlationId ?? null},
         ${data.guildId ?? null}, ${data.memberId ?? null}, ${data.membershipId ?? null},
         ${data.operationName}, ${data.operationType}, ${data.parentOperationId ?? null},
         ${data.providerName ?? null}, ${data.model ?? null}, ${data.status},
-        ${data.durationMs ?? null}, ${data.startedAt}, ${metadataJson}::jsonb
+        ${data.durationMs ?? null}, ${data.providerDurationMs ?? null},
+        ${data.inputTokens ?? null}, ${data.outputTokens ?? null}, ${data.startedAt}, ${metadataJson}::jsonb, ${data.createdAt}
       )
       RETURNING id, interaction_id AS "interactionId", correlation_id AS "correlationId",
         guild_id AS "guildId", member_id AS "memberId", membership_id AS "membershipId",
         operation_name AS "operationName", operation_type AS "operationType",
         parent_operation_id AS "parentOperationId",
         provider_name AS "providerName", model, status, duration_ms AS "durationMs",
+        provider_duration_ms AS "providerDurationMs",
+        input_tokens AS "inputTokens", output_tokens AS "outputTokens",
         started_at AS "startedAt", metadata, created_at AS "createdAt"
     `.execute(this.db);
     return rows[0];
+  }
+
+  async patchInteractionId(id: string, interactionId: string): Promise<void> {
+    await this.db.updateTable('operation_log')
+      .set({ interactionId } as any)
+      .where('id', '=', id)
+      .execute();
   }
 
   async finalize(
     id: string,
     status: OperationStatus,
     durationMs: number,
-    extra?: { providerName?: string | null; model?: string | null; metadata?: Record<string, unknown> },
+    extra?: { providerName?: string | null; model?: string | null; providerDurationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null; metadata?: Record<string, unknown> },
   ): Promise<void> {
-    let q = this.db.updateTable('operation_latencies')
+    let q = this.db.updateTable('operation_log')
       .set({
         status,
         durationMs,
@@ -677,6 +692,15 @@ export class OperationLatencyRepo {
     }
     if (extra?.model !== undefined) {
       q = q.set({ model: extra.model } as any);
+    }
+    if (extra?.providerDurationMs !== undefined) {
+      q = q.set({ providerDurationMs: extra.providerDurationMs } as any);
+    }
+    if (extra?.inputTokens !== undefined) {
+      q = q.set({ inputTokens: extra.inputTokens } as any);
+    }
+    if (extra?.outputTokens !== undefined) {
+      q = q.set({ outputTokens: extra.outputTokens } as any);
     }
     if (extra?.metadata !== undefined) {
       q = q.set({ metadata: JSON.stringify(extra.metadata) } as any);

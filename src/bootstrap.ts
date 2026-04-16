@@ -18,7 +18,7 @@ import {
   IdentityAliasRepo,
   ActionOutcomeRepo,
   EmbeddingRepo,
-  OperationLatencyRepo,
+  OperationLogRepo,
   MemoryRetrieval,
 } from './db/repos.js';
 import { createQueues } from './queue/definitions.js';
@@ -85,12 +85,12 @@ export async function bootstrap(): Promise<BootstrapResult> {
     identityAliases: new IdentityAliasRepo(db),
     actionOutcomes: new ActionOutcomeRepo(db),
     embeddings: new EmbeddingRepo(db),
-    operationLatencies: new OperationLatencyRepo(db),
+    operationLog: new OperationLogRepo(db),
     memoryRetrieval: new MemoryRetrieval(db),
   };
 
   // Wire latency tracker repo accessor
-  setLatencyRepoAccessor(() => repos.operationLatencies);
+  setLatencyRepoAccessor(() => repos.operationLog);
 
   // Provider registry
   const registry: ProviderRegistry = {

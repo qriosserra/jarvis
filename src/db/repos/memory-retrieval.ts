@@ -48,8 +48,8 @@ export class MemoryRetrieval {
               mr.expires_at AS "expiresAt",
               mr.created_at AS "createdAt", mr.updated_at AS "updatedAt",
               1 - (e.embedding <=> $${idx}::vector) AS score
-       FROM memory_records mr
-       JOIN embeddings e ON e.memory_record_id = mr.id
+       FROM memory_record mr
+       JOIN embedding e ON e.memory_record_id = mr.id
        WHERE ${conditions.join(' AND ')}
          AND e.embedding IS NOT NULL
        ORDER BY e.embedding <=> $${idx}::vector ASC
@@ -74,7 +74,7 @@ export class MemoryRetrieval {
               mr.expires_at AS "expiresAt",
               mr.created_at AS "createdAt", mr.updated_at AS "updatedAt",
               mr.confidence AS score
-       FROM memory_records mr
+       FROM memory_record mr
        WHERE ${conditions.join(' AND ')}
        ORDER BY mr.created_at DESC
        LIMIT ${filter.limit ?? 20}`,
@@ -109,8 +109,8 @@ export class MemoryRetrieval {
                 $${idx + 1}::real * (1 - (e.embedding <=> $${idx}::vector))
                 + $${idx + 2}::real * EXP(-EXTRACT(EPOCH FROM (now() - mr.created_at)) / (86400.0 * $${idx + 3}::real))
               ) AS score
-       FROM memory_records mr
-       JOIN embeddings e ON e.memory_record_id = mr.id
+       FROM memory_record mr
+       JOIN embedding e ON e.memory_record_id = mr.id
        WHERE ${conditions.join(' AND ')}
          AND e.embedding IS NOT NULL
        ORDER BY score DESC

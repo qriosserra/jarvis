@@ -17,10 +17,10 @@ export class GuildMembershipRepo {
     displayName?: string | null;
   }): Promise<GuildMembership> {
     const { rows } = await this.pool.query<GuildMembership>(
-      `INSERT INTO guild_memberships (guild_id, user_id, display_name)
+      `INSERT INTO guild_membership (guild_id, user_id, display_name)
        VALUES ($1, $2, $3)
        ON CONFLICT (guild_id, user_id) DO UPDATE
-         SET display_name = COALESCE($3, guild_memberships.display_name),
+         SET display_name = COALESCE($3, guild_membership.display_name),
              updated_at = now()
        RETURNING ${COLUMNS}`,
       [data.guildId, data.userId, data.displayName ?? null],
@@ -30,7 +30,7 @@ export class GuildMembershipRepo {
 
   async findByGuildAndUser(guildId: string, userId: string): Promise<GuildMembership | null> {
     const { rows } = await this.pool.query<GuildMembership>(
-      `SELECT ${COLUMNS} FROM guild_memberships
+      `SELECT ${COLUMNS} FROM guild_membership
        WHERE guild_id = $1 AND user_id = $2`,
       [guildId, userId],
     );
@@ -39,7 +39,7 @@ export class GuildMembershipRepo {
 
   async findById(id: string): Promise<GuildMembership | null> {
     const { rows } = await this.pool.query<GuildMembership>(
-      `SELECT ${COLUMNS} FROM guild_memberships WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM guild_membership WHERE id = $1`,
       [id],
     );
     return rows[0] ?? null;
@@ -47,7 +47,7 @@ export class GuildMembershipRepo {
 
   async listByGuild(guildId: string): Promise<GuildMembership[]> {
     const { rows } = await this.pool.query<GuildMembership>(
-      `SELECT ${COLUMNS} FROM guild_memberships
+      `SELECT ${COLUMNS} FROM guild_membership
        WHERE guild_id = $1
        ORDER BY created_at`,
       [guildId],
@@ -57,7 +57,7 @@ export class GuildMembershipRepo {
 
   async listByUser(userId: string): Promise<GuildMembership[]> {
     const { rows } = await this.pool.query<GuildMembership>(
-      `SELECT ${COLUMNS} FROM guild_memberships
+      `SELECT ${COLUMNS} FROM guild_membership
        WHERE user_id = $1
        ORDER BY created_at`,
       [userId],

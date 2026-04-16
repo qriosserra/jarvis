@@ -32,6 +32,7 @@ interface CliOptions {
   persona: string;
   language?: string;
   trigger: RequestTrigger;
+  noMemory: boolean;
 }
 
 function parseCliArgs(): { requestText: string; options: CliOptions } {
@@ -43,8 +44,9 @@ function parseCliArgs(): { requestText: string; options: CliOptions } {
       username: { type: 'string', default: 'cli-user' },
       persona:  { type: 'string', default: 'jarvis' },
       language: { type: 'string' },
-      trigger:  { type: 'string', default: 'mention' },
-      help:     { type: 'boolean', short: 'h', default: false },
+      trigger:    { type: 'string', default: 'mention' },
+      'no-memory': { type: 'boolean', default: false },
+      help:       { type: 'boolean', short: 'h', default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -65,6 +67,7 @@ Options:
   --persona <name>   Persona name                           (default: jarvis)
   --language <code>  Language hint (e.g. "en", "nl")
   --trigger <type>   Request trigger: mention|reply|indirect (default: mention)
+  --no-memory        Skip memory persistence
   -h, --help         Show this help
 
 Examples:
@@ -87,6 +90,7 @@ Examples:
       persona: values.persona as string,
       language: values.language as string | undefined,
       trigger: (values.trigger as RequestTrigger) ?? 'mention',
+      noMemory: Boolean(values['no-memory']),
     },
   };
 }
@@ -118,6 +122,8 @@ async function main(): Promise<void> {
     language: options.language,
     timestamp: new Date(),
     simulateActions: true,
+    backgroundTasks: [],
+    skipMemoryPersistence: options.noMemory,
     replyHandler: (text: string) => {
       console.log('\n┌─ Jarvis reply ─────────────────────────────────────────');
       console.log(`│ ${text.replace(/\n/g, '\n│ ')}`);
@@ -133,6 +139,12 @@ async function main(): Promise<void> {
     () => handleInteraction(ctx),
     correlationId,
   );
+
+  // Wait for background tasks (memory persistence) before tearing down infra
+  if (ctx.backgroundTasks!.length > 0) {
+    logger.info(`Awaiting ${ctx.backgroundTasks!.length} background task(s)…`);
+    await Promise.allSettled(ctx.backgroundTasks!);
+  }
 
   await shutdown();
 }

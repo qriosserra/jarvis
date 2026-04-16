@@ -7,6 +7,7 @@ import { getContainer } from '../container.js';
 import { INTERPRETATION_SYSTEM_PROMPT, buildInterpretationContext } from './prompts.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation } from '../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 import { llmLatency, providerErrorCounter } from '../lib/metrics.js';
 
 const logger = createLogger('interpret');
@@ -36,8 +37,8 @@ export async function interpretIntent(ctx: InteractionContext, parentOperationId
     try {
       const { result: response, durationMs } = await trackOperation(
         {
-          operationName: 'llm_interpretation',
-          operationType: 'llm',
+          operationName: OperationName.LLM_INTERPRETATION,
+          operationType: OperationType.LLM,
           providerName: provider.name,
           model,
           context: {
@@ -47,9 +48,14 @@ export async function interpretIntent(ctx: InteractionContext, parentOperationId
             interactionId: ctx.interactionId,
             parentOperationId,
           },
-          metadata: { task: 'interpretation' },
+          metadata: { task: OperationMetadata.Task.INTERPRETATION },
         },
         () => provider.complete(messages, { model, temperature: 0.1, maxTokens: 256 }),
+        (resp) => ({
+          providerDurationMs: resp.providerDurationMs ?? null,
+          inputTokens: resp.usage?.promptTokens ?? null,
+          outputTokens: resp.usage?.completionTokens ?? null,
+        }),
       );
 
       llmLatency.record(durationMs, { task: 'interpretation', provider: provider.name });

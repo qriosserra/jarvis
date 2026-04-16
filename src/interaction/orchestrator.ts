@@ -10,7 +10,8 @@ import { persistInteractionMemory, persistActionOutcomeMemory } from '../memory/
 import { ingestRequesterNames } from '../memory/identity.js';
 import { getContainer } from '../container.js';
 import { createLogger } from '../lib/logger.js';
-import { trackOperation, type OperationContext } from '../lib/latency-tracker.js';
+import { trackOperation, runTrackedPipeline, patchOperationInteractionId, type OperationContext } from '../lib/latency-tracker.js';
+import { OperationName, OperationType } from '../lib/operation-constants.js';
 import {
   interactionCounter,
   interactionDuration,
@@ -19,13 +20,14 @@ import {
 
 const logger = createLogger('orchestrator');
 
-function opCtx(ctx: InteractionContext): OperationContext {
+function opCtx(ctx: InteractionContext, parentOperationId?: string): OperationContext {
   return {
     correlationId: ctx.correlationId,
     guildId: ctx.guildId,
     memberId: ctx.requester.id,
     membershipId: ctx.membershipId,
     interactionId: ctx.interactionId,
+    parentOperationId,
   };
 }
 
@@ -41,6 +43,7 @@ function opCtx(ctx: InteractionContext): OperationContext {
 export async function handleInteraction(ctx: InteractionContext): Promise<void> {
   const tracer = trace.getTracer('jarvis');
   const startMs = Date.now();
+  const rootOpId = randomUUID();
 
   return tracer.startActiveSpan('handleInteraction', async (span) => {
     span.setAttributes({
@@ -62,85 +65,92 @@ export async function handleInteraction(ctx: InteractionContext): Promise<void> 
       'Orchestrating interaction',
     );
 
-    try {
-      // Step 0a — ensure the guild row exists before any guild-scoped writes
-      await trackOperation(
-        { operationName: 'guild_bootstrap', operationType: 'pipeline', context: opCtx(ctx) },
-        () => bootstrapGuild(ctx),
-      );
+    await trackOperation(
+      {
+        operationName: OperationName.INTERACTION,
+        operationType: OperationType.PIPELINE,
+        operationId: rootOpId,
+        context: opCtx(ctx),
+        metadata: { surface: ctx.surface, trigger: ctx.trigger },
+      },
+      async () => {
+        try {
+          await runTrackedPipeline({ operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId) }, [
+            // Step 0a — ensure the guild row exists before any guild-scoped writes
+            [OperationName.GUILD_BOOTSTRAP,      () => bootstrapGuild(ctx)],
+            // Step 0a-2 — bootstrap user + guild membership so all downstream
+          // writes have a valid membership FK.
+            [OperationName.MEMBERSHIP_BOOTSTRAP, () => bootstrapMembership(ctx)],
+            // Step 0b — resolve persona name → DB UUID for persistence
+            [OperationName.PERSONA_RESOLUTION,   () => resolvePersona(ctx)],
+          ]);
 
-      // Step 0a-2 — bootstrap user + guild membership so all downstream
-      // writes have a valid membership FK.
-      await trackOperation(
-        { operationName: 'membership_bootstrap', operationType: 'pipeline', context: opCtx(ctx) },
-        () => bootstrapMembership(ctx),
-      );
+          // Step 0c — create the interaction row early so all downstream
+          // latency records and action outcomes can reference its UUID.
+          await createEarlyInteraction(ctx);
 
-      // Step 0b — resolve persona name → DB UUID for persistence
-      await trackOperation(
-        { operationName: 'persona_resolution', operationType: 'pipeline', context: opCtx(ctx) },
-        () => resolvePersona(ctx),
-      );
+          // Patch the root operation row with the newly created interaction_id
+          if (ctx.interactionId) {
+            patchOperationInteractionId(rootOpId, ctx.interactionId).catch(() => {});
+          }
 
-      // Step 0c — create the interaction row early so all downstream
-      // latency records and action outcomes can reference its UUID.
-      await createEarlyInteraction(ctx);
+          // Step 0d — refresh identity records (non-blocking)
+          ingestRequesterNames(ctx).catch(() => {});
 
-      // Step 0d — refresh identity records (non-blocking)
-      ingestRequesterNames(ctx).catch(() => {});
+          // Step 1 — intent interpretation
+          const intentOpId = randomUUID();
+          const { result: intent } = await trackOperation(
+            { operationName: OperationName.INTENT_INTERPRETATION, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), operationId: intentOpId },
+            () => interpretIntent(ctx, intentOpId),
+          );
 
-      // Step 1 — intent interpretation
-      const intentOpId = randomUUID();
-      const { result: intent } = await trackOperation(
-        { operationName: 'intent_interpretation', operationType: 'pipeline', context: opCtx(ctx), operationId: intentOpId },
-        () => interpretIntent(ctx, intentOpId),
-      );
+          span.setAttribute('jarvis.intent_kind', intent.kind);
+          logger.info(
+            { correlationId: ctx.correlationId, intentKind: intent.kind },
+            'Intent resolved',
+          );
 
-      span.setAttribute('jarvis.intent_kind', intent.kind);
-      logger.info(
-        { correlationId: ctx.correlationId, intentKind: intent.kind },
-        'Intent resolved',
-      );
+          // Record classification metrics
+          interactionCounter.add(1, {
+            surface: ctx.surface,
+            trigger: ctx.trigger,
+            intent_kind: intent.kind,
+          });
+          intentClassificationCounter.add(1, { kind: intent.kind });
 
-      // Record classification metrics
-      interactionCounter.add(1, {
-        surface: ctx.surface,
-        trigger: ctx.trigger,
-        intent_kind: intent.kind,
-      });
-      intentClassificationCounter.add(1, { kind: intent.kind });
+          // Step 2 — route by intent category
+          if (isDeterministicIntent(intent)) {
+            const detOpId = randomUUID();
+            await trackOperation(
+              { operationName: OperationName.DETERMINISTIC_ACTION, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), metadata: { intentKind: intent.kind }, operationId: detOpId },
+              () => executeDeterministicAction(ctx, intent, detOpId),
+            );
+          } else {
+            const convOpId = randomUUID();
+            await trackOperation(
+              { operationName: OperationName.CONVERSATIONAL_RESPONSE, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), metadata: { intentKind: intent.kind }, operationId: convOpId },
+              () => executeConversationalResponse(ctx, intent, convOpId),
+            );
+          }
 
-      // Step 2 — route by intent category
-      if (isDeterministicIntent(intent)) {
-        const detOpId = randomUUID();
-        await trackOperation(
-          { operationName: 'deterministic_action', operationType: 'pipeline', context: opCtx(ctx), metadata: { intentKind: intent.kind }, operationId: detOpId },
-          () => executeDeterministicAction(ctx, intent, detOpId),
-        );
-      } else {
-        const convOpId = randomUUID();
-        await trackOperation(
-          { operationName: 'conversational_response', operationType: 'pipeline', context: opCtx(ctx), metadata: { intentKind: intent.kind }, operationId: convOpId },
-          () => executeConversationalResponse(ctx, intent, convOpId),
-        );
-      }
-
-      // Step 3 — enqueue memory consolidation (best-effort, non-blocking)
-      try {
-        await getContainer().queues.memoryConsolidation.add('consolidate', {
-          guildId: ctx.guildId,
-          memberId: ctx.requester.id,
-        });
-      } catch {
-        // Memory consolidation is non-critical
-      }
-    } finally {
-      interactionDuration.record(Date.now() - startMs, {
-        surface: ctx.surface,
-        trigger: ctx.trigger,
-      });
-      span.end();
-    }
+          // Step 3 — enqueue memory consolidation (best-effort, non-blocking)
+          try {
+            await getContainer().queues.memoryConsolidation.add('consolidate', {
+              guildId: ctx.guildId,
+              memberId: ctx.requester.id,
+            });
+          } catch {
+            // Memory consolidation is non-critical
+          }
+        } finally {
+          interactionDuration.record(Date.now() - startMs, {
+            surface: ctx.surface,
+            trigger: ctx.trigger,
+          });
+          span.end();
+        }
+      },
+    );
   });
 }
 
@@ -329,7 +339,12 @@ async function executeConversationalResponse(
   }
 
   // Persist memories (best-effort, non-blocking)
-  persistInteractionMemory(ctx, responseText, intent.kind).catch((err) => {
-    logger.warn({ correlationId: ctx.correlationId, err }, 'Memory persistence failed');
-  });
+  if (!ctx.skipMemoryPersistence) {
+    const memoryTask = persistInteractionMemory(ctx, responseText, intent.kind).catch((err) => {
+      logger.warn({ correlationId: ctx.correlationId, err }, 'Memory persistence failed');
+    });
+    if (ctx.backgroundTasks) {
+      ctx.backgroundTasks.push(memoryTask);
+    }
+  }
 }

@@ -12,6 +12,7 @@ import {
 } from './handlers.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation } from '../lib/latency-tracker.js';
+import { OperationName, OperationType } from '../lib/operation-constants.js';
 import { getContainer, getDiscordClient } from '../container.js';
 import { persistActionOutcomeMemory } from '../memory/persist.js';
 import { checkMemorySafety } from '../memory/safety.js';
@@ -88,8 +89,8 @@ export async function executeAction(
 
   const { result } = await trackOperation(
     {
-      operationName: `action_${intent.kind}`,
-      operationType: 'pipeline',
+      operationName: `${OperationName.ACTION_PREFIX}${intent.kind}`,
+      operationType: OperationType.PIPELINE,
       context: {
         correlationId: ctx.correlationId,
         guildId: ctx.guildId,
@@ -218,7 +219,12 @@ async function sendAndRecord(
   }
 
   // Persist as a memory record for future context (non-blocking)
-  persistActionOutcomeMemory(ctx, intent.kind, result.success, result.message, interactionId).catch(() => {});
+  if (!ctx.skipMemoryPersistence) {
+    const memoryTask = persistActionOutcomeMemory(ctx, intent.kind, result.success, result.message, interactionId).catch(() => {});
+    if (ctx.backgroundTasks) {
+      ctx.backgroundTasks.push(memoryTask);
+    }
+  }
 
   return result;
 }

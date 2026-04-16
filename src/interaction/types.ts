@@ -61,4 +61,14 @@ export interface InteractionContext {
    * results instead of calling live Discord APIs.
    */
   simulateActions?: boolean;
+  /**
+   * Collects background work (e.g. memory persistence) so the caller
+   * can `await Promise.allSettled(backgroundTasks)` before shutdown.
+   * When undefined, background work is fire-and-forget.
+   */
+  backgroundTasks?: Promise<void>[];
+  /**
+   * When `true`, memory persistence is skipped entirely (e.g. `--no-memory`).
+   */
+  skipMemoryPersistence?: boolean;
 }

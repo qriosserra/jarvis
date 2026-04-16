@@ -21,7 +21,7 @@ export class MemoryRecordRepo {
     expiresAt?: Date | null;
   }): Promise<MemoryRecord> {
     const { rows } = await this.pool.query<MemoryRecord>(
-      `INSERT INTO memory_records (guild_id, member_id, membership_id, category, content,
+      `INSERT INTO memory_record (guild_id, member_id, membership_id, category, content,
                                    capability, confidence, source_interaction_id, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNS}`,
@@ -42,7 +42,7 @@ export class MemoryRecordRepo {
 
   async findById(id: string): Promise<MemoryRecord | null> {
     const { rows } = await this.pool.query<MemoryRecord>(
-      `SELECT ${COLUMNS} FROM memory_records WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM memory_record WHERE id = $1`,
       [id],
     );
     return rows[0] ?? null;
@@ -77,7 +77,7 @@ export class MemoryRecordRepo {
     const limit = opts?.limit ?? 50;
 
     const { rows } = await this.pool.query<MemoryRecord>(
-      `SELECT ${COLUMNS} FROM memory_records
+      `SELECT ${COLUMNS} FROM memory_record
        WHERE ${conditions.join(' AND ')}
        ORDER BY created_at DESC
        LIMIT ${limit}`,
@@ -88,14 +88,14 @@ export class MemoryRecordRepo {
 
   async updateConfidence(id: string, confidence: number): Promise<void> {
     await this.pool.query(
-      `UPDATE memory_records SET confidence = $2, updated_at = now() WHERE id = $1`,
+      `UPDATE memory_record SET confidence = $2, updated_at = now() WHERE id = $1`,
       [id, confidence],
     );
   }
 
   async deleteExpired(): Promise<number> {
     const { rowCount } = await this.pool.query(
-      `DELETE FROM memory_records WHERE expires_at IS NOT NULL AND expires_at <= now()`,
+      `DELETE FROM memory_record WHERE expires_at IS NOT NULL AND expires_at <= now()`,
     );
     return rowCount ?? 0;
   }

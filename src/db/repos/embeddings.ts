@@ -13,7 +13,7 @@ export class EmbeddingRepo {
   }): Promise<Embedding> {
     const vectorLiteral = `[${data.embedding.join(',')}]`;
     const { rows } = await this.pool.query<Embedding>(
-      `INSERT INTO embeddings (memory_record_id, embedding, model)
+      `INSERT INTO embedding (memory_record_id, embedding, model)
        VALUES ($1, $2::vector, $3)
        ON CONFLICT (memory_record_id) DO UPDATE
          SET embedding = $2::vector, model = $3, created_at = now()
@@ -25,7 +25,7 @@ export class EmbeddingRepo {
 
   async findByMemoryRecordId(memoryRecordId: string): Promise<Embedding | null> {
     const { rows } = await this.pool.query<Embedding>(
-      `SELECT ${COLUMNS} FROM embeddings WHERE memory_record_id = $1`,
+      `SELECT ${COLUMNS} FROM embedding WHERE memory_record_id = $1`,
       [memoryRecordId],
     );
     return rows[0] ?? null;
@@ -33,7 +33,7 @@ export class EmbeddingRepo {
 
   async deleteByMemoryRecordId(memoryRecordId: string): Promise<void> {
     await this.pool.query(
-      `DELETE FROM embeddings WHERE memory_record_id = $1`,
+      `DELETE FROM embedding WHERE memory_record_id = $1`,
       [memoryRecordId],
     );
   }

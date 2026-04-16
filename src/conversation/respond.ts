@@ -11,6 +11,7 @@ import { speakWithAcknowledgement } from '../voice/playback.js';
 import { DEFAULT_VOICE_CONFIG } from '../voice/types.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation, type OperationContext } from '../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 import { llmLatency, researchLatency, providerErrorCounter } from '../lib/metrics.js';
 
 const logger = createLogger('respond');
@@ -98,14 +99,19 @@ async function generateResponse(
 
   const { result: response, durationMs } = await trackOperation(
     {
-      operationName: 'llm_response',
-      operationType: 'llm',
+      operationName: OperationName.LLM_RESPONSE,
+      operationType: OperationType.LLM,
       providerName: provider.name,
       model,
       context: { ...respondCtx(ctx), parentOperationId },
-      metadata: { task: 'response' },
+      metadata: { task: OperationMetadata.Task.RESPONSE },
     },
     () => provider.complete(messages, { model, temperature: 0.7, maxTokens: 1024 }),
+    (resp) => ({
+      providerDurationMs: resp.providerDurationMs ?? null,
+      inputTokens: resp.usage?.promptTokens ?? null,
+      outputTokens: resp.usage?.completionTokens ?? null,
+    }),
   );
   llmLatency.record(durationMs, { task: 'response', provider: provider.name });
 
@@ -138,8 +144,8 @@ async function generateResearchResponse(
     const researchProvider = container.providers.getResearch();
     const { result: results, durationMs: searchDurationMs } = await trackOperation(
       {
-        operationName: 'research_search',
-        operationType: 'research',
+        operationName: OperationName.RESEARCH_SEARCH,
+        operationType: OperationType.RESEARCH,
         providerName: researchProvider.name,
         context: { ...respondCtx(ctx), parentOperationId },
         metadata: { query },
@@ -182,14 +188,19 @@ async function generateResearchResponse(
 
   const { result: response, durationMs: llmDurationMs } = await trackOperation(
     {
-      operationName: 'llm_research_response',
-      operationType: 'llm',
+      operationName: OperationName.LLM_RESEARCH_RESPONSE,
+      operationType: OperationType.LLM,
       providerName: provider.name,
       model,
       context: { ...respondCtx(ctx), parentOperationId },
-      metadata: { task: 'response', researchAugmented: true },
+      metadata: { task: OperationMetadata.Task.RESPONSE, researchAugmented: true },
     },
     () => provider.complete(messages, { model, temperature: 0.5, maxTokens: 1536 }),
+    (resp) => ({
+      providerDurationMs: resp.providerDurationMs ?? null,
+      inputTokens: resp.usage?.promptTokens ?? null,
+      outputTokens: resp.usage?.completionTokens ?? null,
+    }),
   );
   llmLatency.record(llmDurationMs, { task: 'response', provider: provider.name });
 

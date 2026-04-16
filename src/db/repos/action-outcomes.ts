@@ -22,7 +22,7 @@ export class ActionOutcomeRepo {
     metadata?: Record<string, unknown>;
   }): Promise<ActionOutcome> {
     const { rows } = await this.pool.query<ActionOutcome>(
-      `INSERT INTO action_outcomes (interaction_id, guild_id, action_type,
+      `INSERT INTO action_outcome (interaction_id, guild_id, action_type,
                                     target_member_id, target_membership_id,
                                     target_channel_id,
                                     success, error_message, metadata)
@@ -45,7 +45,7 @@ export class ActionOutcomeRepo {
 
   async findByInteraction(interactionId: string): Promise<ActionOutcome[]> {
     const { rows } = await this.pool.query<ActionOutcome>(
-      `SELECT ${COLUMNS} FROM action_outcomes WHERE interaction_id = $1
+      `SELECT ${COLUMNS} FROM action_outcome WHERE interaction_id = $1
        ORDER BY created_at`,
       [interactionId],
     );
@@ -68,7 +68,7 @@ export class ActionOutcomeRepo {
     const limit = opts?.limit ?? 50;
 
     const { rows } = await this.pool.query<ActionOutcome>(
-      `SELECT ${COLUMNS} FROM action_outcomes
+      `SELECT ${COLUMNS} FROM action_outcome
        WHERE ${conditions.join(' AND ')}
        ORDER BY created_at DESC
        LIMIT ${limit}`,

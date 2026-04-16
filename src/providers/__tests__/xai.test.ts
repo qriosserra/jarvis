@@ -3,12 +3,13 @@ import { XaiLlmProvider, XaiEmbeddingProvider } from '../xai.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function mockFetchResponse(body: unknown, status = 200) {
+function mockFetchResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return vi.fn(async () => ({
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
     text: async () => JSON.stringify(body),
+    headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
   }));
 }
 
@@ -27,7 +28,7 @@ describe('XaiLlmProvider', () => {
       model: 'grok-3-mini',
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     };
-    globalThis.fetch = mockFetchResponse(responseBody) as any;
+    globalThis.fetch = mockFetchResponse(responseBody, 200, { 'x-metrics-e2e-ms': '123' }) as any;
 
     const provider = new XaiLlmProvider('test-key');
     const result = await provider.complete(
@@ -42,6 +43,7 @@ describe('XaiLlmProvider', () => {
       completionTokens: 5,
       totalTokens: 15,
     });
+    expect(result.providerDurationMs).toBe(123);
 
     // Verify fetch was called with correct args
     expect(globalThis.fetch).toHaveBeenCalledOnce();
@@ -97,13 +99,14 @@ describe('XaiEmbeddingProvider', () => {
       data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
       model: 'v2',
     };
-    globalThis.fetch = mockFetchResponse(responseBody) as any;
+    globalThis.fetch = mockFetchResponse(responseBody, 200, { 'x-metrics-e2e-ms': '87' }) as any;
 
     const provider = new XaiEmbeddingProvider('test-key');
     const result = await provider.embed('hello', { model: 'v2' });
 
     expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
     expect(result.model).toBe('v2');
+    expect(result.providerDurationMs).toBe(87);
 
     const [url, opts] = (globalThis.fetch as any).mock.calls[0];
     expect(url).toBe('https://api.x.ai/v1/embeddings');
@@ -122,7 +125,7 @@ describe('XaiEmbeddingProvider', () => {
       ],
       model: 'v2',
     };
-    globalThis.fetch = mockFetchResponse(responseBody) as any;
+    globalThis.fetch = mockFetchResponse(responseBody, 200, {}) as any;
 
     const provider = new XaiEmbeddingProvider('test-key');
     const results = await provider.embedBatch(['a', 'b']);

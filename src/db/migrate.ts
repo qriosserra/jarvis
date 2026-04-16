@@ -11,20 +11,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
 const SCHEMA_FILE = join(__dirname, 'schema.sql');
 
-/** Reserved marker recorded in _migrations when schema.sql bootstraps the DB */
+/** Reserved marker recorded in _migration when schema.sql bootstraps the DB */
 const SCHEMA_MARKER = 'schema.sql';
 
 export async function runMigrations(pool: Pool): Promise<void> {
-  // Ensure the _migrations table exists (idempotent)
+  // Ensure the _migration table exists (idempotent)
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS _migrations (
+    CREATE TABLE IF NOT EXISTS _migration (
       name TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
 
   const applied = await pool
-    .query<{ name: string }>('SELECT name FROM _migrations ORDER BY name')
+    .query<{ name: string }>('SELECT name FROM _migration ORDER BY name')
     .then((r) => new Set(r.rows.map((row) => row.name)));
 
   const hasSchemaFile = existsSync(SCHEMA_FILE);
@@ -54,7 +54,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
     await pool.query('BEGIN');
     try {
       await pool.query(sql);
-      await pool.query('INSERT INTO _migrations (name) VALUES ($1)', [SCHEMA_MARKER]);
+      await pool.query('INSERT INTO _migration (name) VALUES ($1)', [SCHEMA_MARKER]);
       await pool.query('COMMIT');
       logger.info('schema-file — applied schema.sql');
     } catch (err) {
@@ -90,7 +90,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
     await pool.query('BEGIN');
     try {
       await pool.query(sql);
-      await pool.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+      await pool.query('INSERT INTO _migration (name) VALUES ($1)', [file]);
       await pool.query('COMMIT');
       logger.info({ file }, 'Migration applied');
     } catch (err) {

@@ -4,6 +4,7 @@ import { getContainer } from '../container.js';
 import { selectBestName } from './identity.js';
 import { createLogger } from '../lib/logger.js';
 import { trackOperation } from '../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 
 const logger = createLogger('memory-retrieve');
 
@@ -88,8 +89,8 @@ async function retrieveMemories(ctx: InteractionContext, parentOperationId?: str
     const { provider: embeddingProvider, model: embeddingModel } = container.providers.getEmbedding();
     const { result: embedResult } = await trackOperation(
       {
-        operationName: 'embedding_query',
-        operationType: 'embedding',
+        operationName: OperationName.EMBEDDING_QUERY,
+        operationType: OperationType.EMBEDDING,
         providerName: embeddingProvider.name,
         model: embeddingModel,
         context: {
@@ -99,9 +100,10 @@ async function retrieveMemories(ctx: InteractionContext, parentOperationId?: str
           interactionId: ctx.interactionId,
           parentOperationId,
         },
-        metadata: { inputType: 'query' },
+        metadata: { inputType: OperationMetadata.InputType.QUERY },
       },
       () => embeddingProvider.embed(ctx.requestText, { model: embeddingModel, inputType: 'query' }),
+      (res) => ({ providerDurationMs: res.providerDurationMs ?? null }),
     );
 
     const results = await retrieval.searchHybrid(

@@ -11,6 +11,9 @@ const DB_NAME = 'jarvis';
 
 const run = (cmd) => execSync(cmd, { stdio: 'inherit' });
 
+console.log(`Restarting container "${CONTAINER}"…`);
+run(`docker restart ${CONTAINER}`);
+
 console.log(`Dropping database "${DB_NAME}"…`);
 run(`docker exec ${CONTAINER} psql -U ${DB_USER} -d postgres -c "DROP DATABASE IF EXISTS ${DB_NAME};"`);
 

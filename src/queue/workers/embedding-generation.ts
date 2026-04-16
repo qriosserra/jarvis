@@ -8,6 +8,7 @@ import type { Database } from '../../db/kysely.js';
 import type { EmbeddingProvider } from '../../providers/types.js';
 import { queueJobCounter, queueJobDuration } from '../../lib/metrics.js';
 import { trackOperation } from '../../lib/latency-tracker.js';
+import { OperationName, OperationType, OperationMetadata } from '../../lib/operation-constants.js';
 
 const logger = createLogger('worker:embedding-generation');
 
@@ -31,13 +32,14 @@ export function startEmbeddingWorker(deps: EmbeddingWorkerDeps): Worker<Embeddin
 
       const { result } = await trackOperation(
         {
-          operationName: 'embedding_document',
-          operationType: 'embedding',
+          operationName: OperationName.EMBEDDING_DOCUMENT,
+          operationType: OperationType.EMBEDDING,
           providerName: deps.embeddingProvider.name,
           model: deps.embeddingModel,
-          metadata: { inputType: 'document', memoryRecordId, queue: 'embedding-generation' },
+          metadata: { inputType: OperationMetadata.InputType.DOCUMENT, memoryRecordId, queue: OperationMetadata.Queue.EMBEDDING_GENERATION },
         },
         () => deps.embeddingProvider.embed(content, { model: deps.embeddingModel, inputType: 'document' }),
+        (res) => ({ providerDurationMs: res.providerDurationMs ?? null }),
       );
 
       if (!dimensionLogged) {

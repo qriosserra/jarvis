@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');fs.cpSync('src/db/schema.sql','dist/db/schema.sql');fs.cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "start": "pnpm node dist/index.js",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "dev:docker": "nodemon --legacy-watch --watch src --ext ts,json --exec tsx src/index.ts",
     "lint": "eslint src/",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -47,6 +48,7 @@
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "eslint": "^9.16.0",
+    "nodemon": "^3.1.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
