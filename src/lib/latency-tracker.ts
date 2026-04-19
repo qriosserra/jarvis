@@ -75,12 +75,12 @@ function getRepo(): OperationLogRepo | undefined {
 /**
  * Execute an async operation and record its latency.
  *
- * - Emits a structured log with duration and status on completion.
  * - Persists a row in `operation_log` (best-effort).
  * - Returns the wrapped result plus timing metadata.
  *
  * Persistence failures are swallowed — observability must never
- * break user-facing flows.
+ * break user-facing flows.  Operation-level logging is the
+ * responsibility of the call site.
  */
 export async function trackOperation<T>(
   opts: TrackOptions,
@@ -115,8 +115,6 @@ export async function trackOperation<T>(
       operationId = await persistRecord(effectiveOpts, status, durationMs, startedAt) ?? opts.operationId;
     }
 
-    logCompletion(opts, status, durationMs);
-
     return { result, durationMs, operationId };
   } catch (err) {
     status = 'failed';
@@ -127,8 +125,6 @@ export async function trackOperation<T>(
     } else {
       await persistRecord(opts, status, durationMs, startedAt);
     }
-
-    logCompletion(opts, status, durationMs, err);
 
     throw err;
   }
@@ -307,27 +303,68 @@ async function persistRecord(
   }
 }
 
-function logCompletion(
-  opts: TrackOptions,
-  status: OperationStatus,
-  durationMs: number,
-  error?: unknown,
-): void {
-  const logData: Record<string, unknown> = {
-    op: opts.operationName,
-    type: opts.operationType,
-    status,
-    durationMs,
-  };
-
-  if (opts.providerName) logData.provider = opts.providerName;
-  if (opts.model) logData.model = opts.model;
-  if (opts.context?.correlationId) logData.correlationId = opts.context.correlationId;
-
-  if (status === 'failed') {
-    logData.err = error;
-    logger.warn(logData, `Operation ${opts.operationName} failed (${durationMs}ms)`);
-  } else {
-    logger.info(logData, `Operation ${opts.operationName} completed (${durationMs}ms)`);
+/**
+ * Produce a human-readable duration string.
+ *
+ * When provider-reported server-side time is available, it is appended
+ * in parentheses so readers can see network overhead at a glance.
+ *
+ * Examples: `"500ms"`, `"500ms (300ms server-side)"`
+ */
+export function formatDuration(
+  totalMs: number,
+  providerMs?: number | null,
+): string {
+  if (typeof providerMs === 'number') {
+    return `${totalMs}ms (${providerMs}ms server-side)`;
   }
+  return `${totalMs}ms`;
+}
+
+/**
+ * Produce a human-readable content-length summary.
+ *
+ * For LLM calls the prompt and response character counts are shown;
+ * for embeddings only the input content length is relevant.
+ *
+ * Examples:
+ *  - `"2000 input • 120 output"`
+ *  - `"450 input"`
+ */
+export function formatLength(
+  promptChars: number,
+  responseChars?: number,
+): string {
+  if (typeof responseChars === 'number') {
+    return `${promptChars} input • ${responseChars} output`;
+  }
+  return `${promptChars} input`;
+}
+
+/**
+ * Produce a compact token-usage summary string.
+ *
+ * Accepts either the full input/output pair (LLM calls) or just the
+ * input count (embedding calls, which have no output tokens).
+ * Returns `undefined` when no token information is available so callers
+ * can omit the field from structured log data.
+ */
+export function formatTokens(
+  inputTokens?: number | null,
+  outputTokens?: number | null,
+): string | undefined {
+  const hasInput = typeof inputTokens === 'number';
+  const hasOutput = typeof outputTokens === 'number';
+
+  if (!hasInput && !hasOutput) return undefined;
+
+  if (hasInput && hasOutput) {
+    return `${inputTokens} input • ${outputTokens} output`;
+  }
+
+  if (hasInput) {
+    return `${inputTokens} input`;
+  }
+
+  return `${outputTokens} output`;
 }

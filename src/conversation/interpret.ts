@@ -5,8 +5,8 @@ import type { LlmMessage } from '../providers/types.js';
 import type { Persona } from '../db/types.js';
 import { getContainer } from '../container.js';
 import { INTERPRETATION_SYSTEM_PROMPT, buildInterpretationContext } from './prompts.js';
-import { createLogger } from '../lib/logger.js';
-import { trackOperation } from '../lib/latency-tracker.js';
+import { createLogger, captureCallSite } from '../lib/logger.js';
+import { trackOperation, formatTokens, formatDuration, formatLength } from '../lib/latency-tracker.js';
 import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 import { llmLatency, providerErrorCounter } from '../lib/metrics.js';
 
@@ -67,14 +67,25 @@ export async function interpretIntent(ctx: InteractionContext, parentOperationId
         'jarvis.llm_model': response.model,
       });
 
-      logger.info(
+      const promptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+
+      // Consolidated LLM log — replaces the removed per-step info/debug lines.
+      logger.debug(
         {
+          source: captureCallSite('interpretIntent'),
+          model: `${provider.name} | ${response.model}`,
+          duration: formatDuration(durationMs, response.providerDurationMs),
+          chars: formatLength(promptChars, response.content.length),
+          tokens: formatTokens(
+            response.usage?.promptTokens,
+            response.usage?.completionTokens,
+          ),
+          intent: intent.kind,
+          prompt: messages,
+          response: response.content,
           correlationId: ctx.correlationId,
-          intentKind: intent.kind,
-          model: response.model,
-          tokens: response.usage?.totalTokens,
         },
-        'Intent interpreted via LLM',
+        'LLM interpretation',
       );
 
       return intent;

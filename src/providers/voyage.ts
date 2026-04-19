@@ -64,6 +64,7 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
     const json = (await res.json()) as {
       data: Array<{ embedding: number[]; index: number }>;
       model: string;
+      usage?: { total_tokens?: number };
     };
 
     if (!json.data || json.data.length === 0) {
@@ -73,9 +74,12 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
     // Sort by index to preserve input order
     const sorted = [...json.data].sort((a, b) => a.index - b.index);
 
+    const inputTokens = json.usage?.total_tokens;
+
     return sorted.map((d) => ({
       embedding: d.embedding,
       model: json.model,
+      inputTokens,
     }));
   }
 }

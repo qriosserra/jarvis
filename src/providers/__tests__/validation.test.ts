@@ -9,6 +9,7 @@ function baseConfig(overrides?: Partial<AppConfig>): AppConfig {
   return {
     env: 'test',
     logLevel: 'warn',
+    log: { consoleEnabled: false, fileEnabled: false, filePath: './logs/app.log' },
     discord: { token: 'tok', clientId: 'cid' },
     database: { url: 'postgresql://localhost/test' },
     redis: { url: 'redis://localhost' },

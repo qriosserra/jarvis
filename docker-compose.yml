@@ -5,11 +5,14 @@ services:
     environment:
       DATABASE_URL: postgresql://jarvis:jarvis@postgres:5432/jarvis
       REDIS_URL: redis://redis:6379
+      TZ: ${TZ:-Europe/Brussels}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
     restart: unless-stopped
 
   postgres:

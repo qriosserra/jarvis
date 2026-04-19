@@ -77,6 +77,7 @@ export function stubConfig(): AppConfig {
   return {
     env: 'test',
     logLevel: 'warn',
+    log: { consoleEnabled: false, fileEnabled: false, filePath: './logs/app.log' },
     discord: { token: 'test-token', clientId: 'test-client-id' },
     database: { url: 'postgresql://localhost/test' },
     redis: { url: 'redis://localhost' },

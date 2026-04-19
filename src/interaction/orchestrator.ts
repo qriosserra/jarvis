@@ -105,10 +105,6 @@ export async function handleInteraction(ctx: InteractionContext): Promise<void> 
           );
 
           span.setAttribute('jarvis.intent_kind', intent.kind);
-          logger.info(
-            { correlationId: ctx.correlationId, intentKind: intent.kind },
-            'Intent resolved',
-          );
 
           // Record classification metrics
           interactionCounter.add(1, {

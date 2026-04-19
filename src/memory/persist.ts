@@ -115,15 +115,6 @@ async function storeMemories(
         content: record.content,
         guildId: ctx.guildId,
       });
-
-      logger.debug(
-        {
-          correlationId: ctx.correlationId,
-          memoryId: record.id,
-          category: mem.category,
-        },
-        'Memory record persisted',
-      );
     } catch (err) {
       logger.warn(
         { correlationId: ctx.correlationId, category: mem.category, err },
@@ -132,7 +123,7 @@ async function storeMemories(
     }
   }
 
-  logger.info(
+  logger.debug(
     { correlationId: ctx.correlationId, count: memories.length },
     'Interaction memories stored',
   );

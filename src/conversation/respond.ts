@@ -9,8 +9,8 @@ import { retrieveContext } from '../memory/retrieve.js';
 import { getActiveConnection } from '../voice/connection.js';
 import { speakWithAcknowledgement } from '../voice/playback.js';
 import { DEFAULT_VOICE_CONFIG } from '../voice/types.js';
-import { createLogger } from '../lib/logger.js';
-import { trackOperation, type OperationContext } from '../lib/latency-tracker.js';
+import { createLogger, captureCallSite } from '../lib/logger.js';
+import { trackOperation, formatTokens, formatDuration, formatLength, type OperationContext } from '../lib/latency-tracker.js';
 import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 import { llmLatency, researchLatency, providerErrorCounter } from '../lib/metrics.js';
 
@@ -61,15 +61,6 @@ export async function generateAndDeliver(
   // Text surface — generate, then deliver
   const responseText = await generateResponseForIntent(ctx, intent, persona, memoryContext, parentOperationId);
 
-  logger.info(
-    {
-      correlationId: ctx.correlationId,
-      intentKind: intent.kind,
-      responseLength: responseText.length,
-    },
-    'Response generated',
-  );
-
   await deliverTextReply(ctx, responseText);
   return responseText;
 }
@@ -115,13 +106,24 @@ async function generateResponse(
   );
   llmLatency.record(durationMs, { task: 'response', provider: provider.name });
 
+  const promptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+
+  // Consolidated LLM log — replaces per-step info/debug lines.
   logger.debug(
     {
+      source: captureCallSite('generateResponse'),
+      model: `${provider.name} | ${response.model}`,
+      duration: formatDuration(durationMs, response.providerDurationMs),
+      chars: formatLength(promptChars, response.content.length),
+      tokens: formatTokens(
+        response.usage?.promptTokens,
+        response.usage?.completionTokens,
+      ),
+      prompt: messages,
+      response: response.content,
       correlationId: ctx.correlationId,
-      model: response.model,
-      tokens: response.usage?.totalTokens,
     },
-    'LLM response generated',
+    'LLM response',
   );
 
   return response.content;
@@ -204,13 +206,24 @@ async function generateResearchResponse(
   );
   llmLatency.record(llmDurationMs, { task: 'response', provider: provider.name });
 
+  const researchPromptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+
+  // Consolidated LLM log — replaces per-step info/debug lines.
   logger.debug(
     {
+      source: captureCallSite('generateResearchResponse'),
+      model: `${provider.name} | ${response.model}`,
+      duration: formatDuration(llmDurationMs, response.providerDurationMs),
+      chars: formatLength(researchPromptChars, response.content.length),
+      tokens: formatTokens(
+        response.usage?.promptTokens,
+        response.usage?.completionTokens,
+      ),
+      prompt: messages,
+      response: response.content,
       correlationId: ctx.correlationId,
-      model: response.model,
-      tokens: response.usage?.totalTokens,
     },
-    'Research-augmented response generated',
+    'LLM research response',
   );
 
   return response.content;

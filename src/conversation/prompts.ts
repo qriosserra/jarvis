@@ -41,8 +41,7 @@ Send a text message in a channel:
 - Use "respond" for general chat, greetings, opinions, or anything you can answer directly.
 - If the request is ambiguous about which action or target, use "ask-clarification".
 - The user may speak in any language. Classify intent regardless of language.
-- For spoken requests that ask to announce, post, or tell something in text: use "send-text-message" and omit channelRef to target the guild's default general text channel unless the user names a specific channel.
-`;
+- For spoken requests that ask to announce, post, or tell something in text: use "send-text-message" and omit channelRef to target the guild's default general text channel unless the user names a specific channel.`;
 
 /**
  * Build additional context for the interpretation prompt.

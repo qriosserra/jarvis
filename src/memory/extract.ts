@@ -2,8 +2,8 @@ import type { LlmMessage } from '../providers/types.js';
 import type { InteractionContext } from '../interaction/types.js';
 import type { MemoryCategory } from '../db/types.js';
 import { getContainer } from '../container.js';
-import { createLogger } from '../lib/logger.js';
-import { trackOperation } from '../lib/latency-tracker.js';
+import { createLogger, captureCallSite } from '../lib/logger.js';
+import { trackOperation, formatTokens, formatDuration, formatLength } from '../lib/latency-tracker.js';
 import { OperationName, OperationType, OperationMetadata } from '../lib/operation-constants.js';
 
 const logger = createLogger('memory-extract');
@@ -40,8 +40,7 @@ Rules:
 - Keep each memory concise (max 150 characters).
 - Prefer structured facts over verbose summaries.
 - Do NOT store sensitive information like passwords or tokens.
-- Produce at most 3 memories per interaction.
-`;
+- Produce at most 3 memories per interaction.`;
 
 // ── Public API ──────────────────────────────────────────────────────
 
@@ -72,7 +71,7 @@ export async function extractMemories(
       },
     ];
 
-    const { result } = await trackOperation(
+    const { result, durationMs } = await trackOperation(
       {
         operationName: OperationName.LLM_MEMORY_EXTRACTION,
         operationType: OperationType.LLM,
@@ -96,12 +95,25 @@ export async function extractMemories(
 
     const memories = parseExtractedMemories(result.content);
 
+    const promptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+
+    // Consolidated LLM log — replaces per-step info/debug lines.
     logger.debug(
       {
-        correlationId: ctx.correlationId,
+        source: captureCallSite('extractMemories'),
+        model: `${provider.name} | ${result.model}`,
+        duration: formatDuration(durationMs, result.providerDurationMs),
+        chars: formatLength(promptChars, result.content.length),
+        tokens: formatTokens(
+          result.usage?.promptTokens,
+          result.usage?.completionTokens,
+        ),
         extractedCount: memories.length,
+        prompt: messages,
+        response: result.content,
+        correlationId: ctx.correlationId,
       },
-      'Memories extracted from interaction',
+      'LLM memory extraction',
     );
 
     return memories;

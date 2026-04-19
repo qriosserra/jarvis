@@ -47,6 +47,9 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),
+  LOG_CONSOLE_ENABLED: z.coerce.boolean().default(true),
+  LOG_FILE_ENABLED: z.coerce.boolean().default(false),
+  LOG_FILE_PATH: z.string().default('./logs/app.log'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -54,6 +57,12 @@ export type Env = z.infer<typeof envSchema>;
 export interface AppConfig {
   env: Env['NODE_ENV'];
   logLevel: Env['LOG_LEVEL'];
+
+  log: {
+    consoleEnabled: boolean;
+    fileEnabled: boolean;
+    filePath: string;
+  };
 
   discord: {
     token?: string;
@@ -115,6 +124,12 @@ export function loadConfig(): AppConfig {
   return {
     env: env.NODE_ENV,
     logLevel: env.LOG_LEVEL,
+
+    log: {
+      consoleEnabled: env.LOG_CONSOLE_ENABLED,
+      fileEnabled: env.LOG_FILE_ENABLED,
+      filePath: env.LOG_FILE_PATH,
+    },
 
     discord: {
       token: env.DISCORD_TOKEN,

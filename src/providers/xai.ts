@@ -126,6 +126,7 @@ export class XaiEmbeddingProvider implements EmbeddingProvider {
     const json = (await res.json()) as {
       data: Array<{ embedding: number[]; index: number }>;
       model: string;
+      usage?: { total_tokens?: number };
     };
 
     if (!json.data || json.data.length === 0) {
@@ -136,10 +137,12 @@ export class XaiEmbeddingProvider implements EmbeddingProvider {
     const sorted = [...json.data].sort((a, b) => a.index - b.index);
 
     const providerDurationMs = parseHeaderMs(res.headers.get('x-metrics-e2e-ms'));
+    const inputTokens = json.usage?.total_tokens;
     return sorted.map((d) => ({
       embedding: d.embedding,
       model: json.model,
       providerDurationMs,
+      inputTokens,
     }));
   }
 }

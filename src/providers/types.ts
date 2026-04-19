@@ -97,6 +97,8 @@ export interface EmbeddingResult {
   model: string;
   /** Server-side processing time reported by the provider (ms), if available. */
   providerDurationMs?: number;
+  /** Total input tokens consumed by the embedding call, if reported by the provider. */
+  inputTokens?: number;
 }
 
 export interface EmbeddingProvider {

@@ -43,6 +43,7 @@ services:
       - DATABASE_URL=postgresql://jarvis:jarvis@postgres:5432/jarvis
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
+      - TZ=${TZ:-Europe/Brussels}
     depends_on:
       postgres:
         condition: service_healthy
