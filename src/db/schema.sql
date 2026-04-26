@@ -141,31 +141,21 @@ CREATE TABLE embedding (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── Operation log (two-phase persistence) ───────────────────────────
-CREATE TABLE operation_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  interaction_id UUID REFERENCES interaction(id) ON DELETE SET NULL,
-  correlation_id TEXT,
-  parent_operation_id UUID REFERENCES operation_log(id) ON DELETE SET NULL,
-  guild_id TEXT REFERENCES guild(id) ON DELETE SET NULL,
-  member_id TEXT,
-  membership_id UUID REFERENCES guild_membership(id) ON DELETE SET NULL,
-  operation_name TEXT NOT NULL,
-  operation_type TEXT NOT NULL,
-  provider_name TEXT,
-  model TEXT,
-  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
-  metadata JSONB NOT NULL DEFAULT '{}',
-  duration_ms REAL,
-  provider_duration_ms REAL,
-  input_tokens INTEGER,
-  output_tokens INTEGER,
-  started_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL,
-  CONSTRAINT operation_log_duration_non_negative CHECK (duration_ms IS NULL OR duration_ms >= 0),
-  CONSTRAINT operation_log_provider_duration_non_negative CHECK (provider_duration_ms IS NULL OR provider_duration_ms >= 0),
-  CONSTRAINT operation_log_ck_input_tokens_non_negative CHECK (input_tokens IS NULL OR input_tokens >= 0),
-  CONSTRAINT operation_log_ck_output_tokens_non_negative CHECK (output_tokens IS NULL OR output_tokens >= 0)
+-- ── Log (unified structured log, fed by Pino DB transport) ──────────
+CREATE TABLE log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  level           TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  module          TEXT,
+  source          TEXT,
+  correlation_id  TEXT,
+  interaction_id  UUID REFERENCES interaction(id) ON DELETE SET NULL,
+  guild_id        TEXT REFERENCES guild(id) ON DELETE SET NULL,
+  member_id       TEXT,
+  status          TEXT CHECK (status IN ('running', 'completed', 'failed')),
+  duration_ms     REAL,
+  metadata        JSONB NOT NULL DEFAULT '{}',
+  logged_at       TIMESTAMPTZ NOT NULL
 );
 
 -- ── Indexes: member ─────────────────────────────────────────────────
@@ -210,15 +200,13 @@ CREATE INDEX idx_action_outcome_guild ON action_outcome(guild_id);
 --     USING hnsw ((embedding::vector(N)) vector_cosine_ops);
 CREATE UNIQUE INDEX idx_embedding_memory_record ON embedding(memory_record_id);
 
--- ── Indexes: operation_log ──────────────────────────────────────────
-CREATE INDEX idx_op_log_created ON operation_log(created_at DESC);
-CREATE INDEX idx_op_log_name ON operation_log(operation_name);
-CREATE INDEX idx_op_log_model ON operation_log(model) WHERE model IS NOT NULL;
-CREATE INDEX idx_op_log_provider ON operation_log(provider_name) WHERE provider_name IS NOT NULL;
-CREATE INDEX idx_op_log_correlation ON operation_log(correlation_id) WHERE correlation_id IS NOT NULL;
-CREATE INDEX idx_op_log_interaction ON operation_log(interaction_id) WHERE interaction_id IS NOT NULL;
-CREATE INDEX idx_op_log_parent ON operation_log(parent_operation_id) WHERE parent_operation_id IS NOT NULL;
-CREATE INDEX idx_op_log_membership ON operation_log(membership_id) WHERE membership_id IS NOT NULL;
+-- ── Indexes: log ────────────────────────────────────────────────────
+CREATE INDEX log_ix_logged_at ON log(logged_at DESC);
+CREATE INDEX log_ix_level ON log(level);
+CREATE INDEX log_ix_module ON log(module) WHERE module IS NOT NULL;
+CREATE INDEX log_ix_correlation_id ON log(correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX log_ix_interaction_id ON log(interaction_id) WHERE interaction_id IS NOT NULL;
+CREATE INDEX log_ix_guild_id ON log(guild_id) WHERE guild_id IS NOT NULL;
 
 -- ── Seed: default personas ──────────────────────────────────────────
 INSERT INTO persona (name, description, system_prompt, response_style, is_default)

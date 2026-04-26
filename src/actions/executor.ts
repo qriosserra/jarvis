@@ -31,7 +31,6 @@ const logger = createLogger('action-executor');
 export async function executeAction(
   ctx: InteractionContext,
   intent: IntentOutcome,
-  parentOperationId?: string,
 ): Promise<ActionResult> {
   // CLI / headless simulation — return descriptive results without Discord
   if (ctx.simulateActions) {
@@ -96,7 +95,6 @@ export async function executeAction(
         guildId: ctx.guildId,
         memberId: ctx.requester.id,
         interactionId: ctx.interactionId,
-        parentOperationId,
       },
       metadata: { intentKind: intent.kind },
     },

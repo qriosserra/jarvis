@@ -19,7 +19,7 @@ const logger = createLogger('interpret');
  * prompt and parses the JSON response into a typed `IntentOutcome`.
  * Falls back to a generic `respond` intent on parse failure.
  */
-export async function interpretIntent(ctx: InteractionContext, parentOperationId?: string): Promise<IntentOutcome> {
+export async function interpretIntent(ctx: InteractionContext): Promise<IntentOutcome> {
   const container = getContainer();
   const { provider, model } = container.providers.getLlm('interpretation');
 
@@ -46,7 +46,6 @@ export async function interpretIntent(ctx: InteractionContext, parentOperationId
             guildId: ctx.guildId,
             memberId: ctx.requester.id,
             interactionId: ctx.interactionId,
-            parentOperationId,
           },
           metadata: { task: OperationMetadata.Task.INTERPRETATION },
         },

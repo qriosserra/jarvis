@@ -8,10 +8,14 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const CONSOLE_ENABLED = (process.env.LOG_CONSOLE_ENABLED ?? 'true') === 'true';
 const FILE_ENABLED = (process.env.LOG_FILE_ENABLED ?? 'false') === 'true';
 const FILE_PATH = process.env.LOG_FILE_PATH ?? './logs/app.log';
+const DB_ENABLED = (process.env.LOG_DB_ENABLED ?? 'false') === 'true';
 const STDOUT_FD = 1;
 const TRANSPORT_EXTENSION = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
 const PRETTY_TRANSPORT_PATH = fileURLToPath(
   new URL(`./logger-transport${TRANSPORT_EXTENSION}`, import.meta.url),
+);
+const DB_TRANSPORT_PATH = fileURLToPath(
+  new URL(`./logger-db-transport${TRANSPORT_EXTENSION}`, import.meta.url),
 );
 
 const rootLogger = createRootLogger();
@@ -34,6 +38,9 @@ function buildTransportTargets(): TransportTargetOptions[] {
   }
   if (FILE_ENABLED) {
     targets.push(buildFileTarget());
+  }
+  if (DB_ENABLED) {
+    targets.push(buildDbTarget());
   }
   return targets;
 }
@@ -76,6 +83,14 @@ function buildFileTarget(): TransportTargetOptions {
     target: 'pino/file',
     level: LOG_LEVEL,
     options: { destination: absoluteFilePath, mkdir: true, sync: true },
+  };
+}
+
+function buildDbTarget(): TransportTargetOptions {
+  return {
+    target: DB_TRANSPORT_PATH,
+    level: 'debug',
+    options: { connectionString: process.env.DATABASE_URL },
   };
 }
 

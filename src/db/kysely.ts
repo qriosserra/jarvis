@@ -120,24 +120,20 @@ export interface EmbeddingsTable {
   createdAt: Generated<Date>;
 }
 
-export interface OperationLogTable {
+export interface LogTable {
   id: Generated<string>; // UUID
-  interactionId: string | null;
+  level: string;
+  message: string;
+  module: string | null;
+  source: string | null;
   correlationId: string | null;
+  interactionId: string | null;
   guildId: string | null;
   memberId: string | null;
-  membershipId: string | null;
-  operationName: string;
-  operationType: string;
-  parentOperationId: string | null;
-  providerName: string | null;
-  model: string | null;
-  status: string;
+  status: string | null;
   durationMs: number | null;
-  providerDurationMs: number | null;
-  startedAt: Date;
   metadata: Generated<unknown>; // JSONB, default '{}'
-  createdAt: Generated<Date>;
+  loggedAt: Date;
 }
 
 export interface MigrationsTable {
@@ -158,7 +154,7 @@ export interface Database {
   identity_alias: IdentityAliasesTable;
   action_outcome: ActionOutcomesTable;
   embedding: EmbeddingsTable;
-  operation_log: OperationLogTable;
+  log: LogTable;
   _migration: MigrationsTable;
 }
 

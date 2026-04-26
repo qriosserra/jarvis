@@ -16,7 +16,6 @@ import type {
   IdentityAliasRepo,
   ActionOutcomeRepo,
   EmbeddingRepo,
-  OperationLogRepo,
   MemoryRetrieval,
 } from './db/repos.js';
 
@@ -31,7 +30,6 @@ export interface Repos {
   identityAliases: IdentityAliasRepo;
   actionOutcomes: ActionOutcomeRepo;
   embeddings: EmbeddingRepo;
-  operationLog: OperationLogRepo;
   memoryRetrieval: MemoryRetrieval;
 }
 

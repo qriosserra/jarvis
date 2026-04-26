@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { trackOperation, runTrackedPipeline, patchOperationInteractionId, setLatencyRepoAccessor } from '../latency-tracker.js';
+import { trackOperation, runTrackedPipeline } from '../latency-tracker.js';
 import { OperationName, OperationType, OperationMetadata } from '../operation-constants.js';
 
 // ── Setup ────────────────────────────────────────────────────────────
 
-let mockCreate: ReturnType<typeof vi.fn>;
-let mockFinalize: ReturnType<typeof vi.fn>;
-let mockPatchInteractionId: ReturnType<typeof vi.fn>;
+vi.mock('../logger.js', () => {
+  const mockDebug = vi.fn();
+  return {
+    createLogger: vi.fn(() => ({ debug: mockDebug })),
+    __mockDebug: mockDebug,
+  };
+});
 
-beforeEach(() => {
-  mockCreate = vi.fn(async (data: any) => ({ id: data.id ?? 'ol-test', ...data }));
-  mockFinalize = vi.fn(async () => {});
-  mockPatchInteractionId = vi.fn(async () => {});
-  setLatencyRepoAccessor(() => ({ create: mockCreate, finalize: mockFinalize, patchInteractionId: mockPatchInteractionId }) as any);
+let mockDebug: ReturnType<typeof vi.fn>;
+
+beforeEach(async () => {
+  mockDebug = (await import('../logger.js') as any).__mockDebug;
+  mockDebug.mockClear();
 });
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -28,7 +32,7 @@ describe('trackOperation', () => {
     expect(durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('persists a completed record with correct fields', async () => {
+  it('emits a completed log entry with correct fields', async () => {
     await trackOperation(
       {
         operationName: OperationName.LLM_INTERPRETATION,
@@ -45,177 +49,46 @@ describe('trackOperation', () => {
       async () => 'ok',
     );
 
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.operationName).toBe(OperationName.LLM_INTERPRETATION);
-    expect(data.operationType).toBe(OperationType.LLM);
-    expect(data.providerName).toBe('xai');
-    expect(data.model).toBe('grok-3-mini');
-    expect(data.status).toBe('completed');
-    expect(data.durationMs).toBeGreaterThanOrEqual(0);
-    expect(data.correlationId).toBe('corr-1');
-    expect(data.guildId).toBe('g1');
-    expect(data.memberId).toBe('m1');
-    expect(data.metadata).toEqual({ task: OperationMetadata.Task.INTERPRETATION });
-    expect(data.startedAt).toBeInstanceOf(Date);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    const [logObj, msg] = mockDebug.mock.calls[0];
+    expect(msg).toBe(`${OperationName.LLM_INTERPRETATION} completed`);
+    expect(logObj.status).toBe('completed');
+    expect(logObj.durationMs).toBeGreaterThanOrEqual(0);
+    expect(logObj.correlationId).toBe('corr-1');
+    expect(logObj.guildId).toBe('g1');
+    expect(logObj.memberId).toBe('m1');
+    expect(logObj.metadata.operationName).toBe(OperationName.LLM_INTERPRETATION);
+    expect(logObj.metadata.operationType).toBe(OperationType.LLM);
+    expect(logObj.metadata.providerName).toBe('xai');
+    expect(logObj.metadata.model).toBe('grok-3-mini');
+    expect(logObj.metadata.task).toBe(OperationMetadata.Task.INTERPRETATION);
   });
 
-  it('persists a failed record when the operation throws', async () => {
-    const err = new Error('provider timeout');
-
+  it('emits a failed log entry when the operation throws', async () => {
     await expect(
       trackOperation(
         { operationName: OperationName.LLM_RESPONSE, operationType: OperationType.LLM, providerName: 'xai' },
-        async () => { throw err; },
+        async () => { throw new Error('provider timeout'); },
       ),
     ).rejects.toThrow('provider timeout');
 
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.status).toBe('failed');
-    expect(data.operationName).toBe(OperationName.LLM_RESPONSE);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    const [logObj, msg] = mockDebug.mock.calls[0];
+    expect(msg).toBe(`${OperationName.LLM_RESPONSE} failed`);
+    expect(logObj.status).toBe('failed');
   });
 
-  it('still returns the result when persistence fails (best-effort)', async () => {
-    mockCreate.mockRejectedValueOnce(new Error('DB down'));
-
-    const { result } = await trackOperation(
-      { operationName: 'test_op', operationType: 'test' },
-      async () => 'success',
-    );
-
-    expect(result).toBe('success');
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-  });
-
-  it('still throws the original error when persistence also fails', async () => {
-    mockCreate.mockRejectedValueOnce(new Error('DB down'));
-
-    await expect(
-      trackOperation(
-        { operationName: 'test_op', operationType: 'test' },
-        async () => { throw new Error('original'); },
-      ),
-    ).rejects.toThrow('original');
-  });
-
-  it('works when no repo accessor is configured', async () => {
-    setLatencyRepoAccessor(() => undefined);
-
-    const { result, durationMs } = await trackOperation(
-      { operationName: 'test_op', operationType: 'test' },
-      async () => 'no-repo',
-    );
-
-    expect(result).toBe('no-repo');
-    expect(durationMs).toBeGreaterThanOrEqual(0);
-  });
-
-  it('leaves provider/model null for non-model operations', async () => {
-    await trackOperation(
-      { operationName: OperationName.GUILD_BOOTSTRAP, operationType: OperationType.PIPELINE },
-      async () => {},
-    );
-
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.providerName).toBeNull();
-    expect(data.model).toBeNull();
-  });
-
-  it('returns the operationId from the persisted record', async () => {
-    const { operationId } = await trackOperation(
+  it('does not have operationId on the returned result', async () => {
+    const tracked = await trackOperation(
       { operationName: 'test_op', operationType: 'test' },
       async () => 'ok',
     );
 
-    expect(operationId).toBe('ol-test');
+    expect(tracked).toEqual({ result: 'ok', durationMs: expect.any(Number) });
+    expect('operationId' in tracked).toBe(false);
   });
 
-  it('persists interactionId and parentOperationId from context', async () => {
-    await trackOperation(
-      {
-        operationName: OperationName.LLM_RESPONSE,
-        operationType: OperationType.LLM,
-        context: {
-          correlationId: 'corr-1',
-          guildId: 'g1',
-          memberId: 'm1',
-          interactionId: 'int-abc',
-          parentOperationId: 'parent-xyz',
-        },
-      },
-      async () => 'ok',
-    );
-
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.interactionId).toBe('int-abc');
-    expect(data.parentOperationId).toBe('parent-xyz');
-  });
-
-  it('uses two-phase persistence when operationId is provided', async () => {
-    const preAssignedId = 'pre-assigned-uuid';
-    const { operationId } = await trackOperation(
-      { operationName: 'parent_op', operationType: 'pipeline', operationId: preAssignedId },
-      async () => 'ok',
-    );
-
-    // Phase 1: running placeholder inserted before fn()
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const createData = mockCreate.mock.calls[0][0];
-    expect(createData.id).toBe(preAssignedId);
-    expect(createData.status).toBe('running');
-    expect(createData.durationMs).toBeNull();
-
-    // Phase 2: finalized after fn()
-    expect(mockFinalize).toHaveBeenCalledTimes(1);
-    expect(mockFinalize.mock.calls[0][0]).toBe(preAssignedId);
-    expect(mockFinalize.mock.calls[0][1]).toBe('completed');
-    expect(mockFinalize.mock.calls[0][2]).toBeGreaterThanOrEqual(0);
-
-    expect(operationId).toBe(preAssignedId);
-  });
-
-  it('two-phase parent row exists before child inserts', async () => {
-    const parentId = 'parent-pre-gen';
-    const insertOrder: string[] = [];
-
-    mockCreate.mockImplementation(async (data: any) => {
-      insertOrder.push(`create:${data.operationName}:${data.status}`);
-      return { id: data.id ?? 'ol-test', ...data };
-    });
-    mockFinalize.mockImplementation(async () => {
-      insertOrder.push('finalize:parent_op');
-    });
-
-    await trackOperation(
-      { operationName: 'parent_op', operationType: 'pipeline', operationId: parentId },
-      async () => {
-        await trackOperation(
-          {
-            operationName: 'child_op',
-            operationType: 'llm',
-            context: { parentOperationId: parentId },
-          },
-          async () => 'child-result',
-        );
-        return 'parent-result';
-      },
-    );
-
-    // Parent running row inserted first, then child, then parent finalized
-    expect(insertOrder).toEqual([
-      'create:parent_op:running',
-      'create:child_op:completed',
-      'finalize:parent_op',
-    ]);
-
-    // Child references the parent ID
-    const childData = mockCreate.mock.calls[1][0];
-    expect(childData.parentOperationId).toBe(parentId);
-  });
-
-  it('persists providerDurationMs extracted via enrich callback', async () => {
+  it('includes enriched providerDurationMs in emitted log', async () => {
     await trackOperation(
       {
         operationName: OperationName.LLM_RESPONSE,
@@ -227,60 +100,40 @@ describe('trackOperation', () => {
       (resp) => ({ providerDurationMs: resp.providerDurationMs ?? null }),
     );
 
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.providerDurationMs).toBe(42);
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    const [logObj] = mockDebug.mock.calls[0];
+    expect(logObj.metadata.providerDurationMs).toBe(42);
   });
 
-  it('persists null providerDurationMs when provider does not report timing', async () => {
+  it('emits interactionId from context', async () => {
     await trackOperation(
-      { operationName: OperationName.LLM_RESPONSE, operationType: OperationType.LLM, providerName: 'xai' },
-      async () => ({ content: 'hello', model: 'grok-3-mini', providerDurationMs: undefined as number | undefined }),
-      (resp) => ({ providerDurationMs: resp.providerDurationMs ?? null }),
+      {
+        operationName: OperationName.LLM_RESPONSE,
+        operationType: OperationType.LLM,
+        context: {
+          correlationId: 'corr-1',
+          guildId: 'g1',
+          memberId: 'm1',
+          interactionId: 'int-abc',
+        },
+      },
+      async () => 'ok',
     );
 
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    const data = mockCreate.mock.calls[0][0];
-    expect(data.providerDurationMs).toBeNull();
+    expect(mockDebug).toHaveBeenCalledTimes(1);
+    const [logObj] = mockDebug.mock.calls[0];
+    expect(logObj.interactionId).toBe('int-abc');
   });
 
-  it('finalizes with failed status when two-phase operation throws', async () => {
-    const opId = 'fail-two-phase';
+  it('omits undefined provider/model from metadata', async () => {
+    await trackOperation(
+      { operationName: OperationName.GUILD_BOOTSTRAP, operationType: OperationType.PIPELINE },
+      async () => {},
+    );
 
-    await expect(
-      trackOperation(
-        { operationName: 'parent_op', operationType: 'pipeline', operationId: opId },
-        async () => { throw new Error('boom'); },
-      ),
-    ).rejects.toThrow('boom');
-
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockCreate.mock.calls[0][0].status).toBe('running');
-
-    expect(mockFinalize).toHaveBeenCalledTimes(1);
-    expect(mockFinalize.mock.calls[0][0]).toBe(opId);
-    expect(mockFinalize.mock.calls[0][1]).toBe('failed');
-  });
-});
-
-describe('patchOperationInteractionId', () => {
-  it('delegates to repo.patchInteractionId with correct args', async () => {
-    await patchOperationInteractionId('op-123', 'int-456');
-
-    expect(mockPatchInteractionId).toHaveBeenCalledTimes(1);
-    expect(mockPatchInteractionId).toHaveBeenCalledWith('op-123', 'int-456');
-  });
-
-  it('is a no-op when no repo accessor is configured', async () => {
-    setLatencyRepoAccessor(() => undefined);
-
-    await expect(patchOperationInteractionId('op-1', 'int-2')).resolves.toBeUndefined();
-  });
-
-  it('swallows errors from the repo (best-effort)', async () => {
-    mockPatchInteractionId.mockRejectedValueOnce(new Error('DB down'));
-
-    await expect(patchOperationInteractionId('op-1', 'int-2')).resolves.toBeUndefined();
+    const [logObj] = mockDebug.mock.calls[0];
+    expect(logObj.metadata.providerName).toBeUndefined();
+    expect(logObj.metadata.model).toBeUndefined();
   });
 });
 
@@ -307,7 +160,7 @@ describe('runTrackedPipeline', () => {
     expect(results).toEqual(['alpha', 42, { key: 'value' }]);
   });
 
-  it('passes operationType and context to every persisted record', async () => {
+  it('emits a log entry per step with shared context', async () => {
     const sharedContext = { correlationId: 'corr-pipe', guildId: 'g-pipe' };
 
     await runTrackedPipeline({ operationType: 'pipeline', context: sharedContext }, [
@@ -315,12 +168,12 @@ describe('runTrackedPipeline', () => {
       ['step_b', async () => 'b'],
     ]);
 
-    expect(mockCreate).toHaveBeenCalledTimes(2);
-    for (const call of mockCreate.mock.calls) {
-      const data = call[0];
-      expect(data.operationType).toBe('pipeline');
-      expect(data.correlationId).toBe('corr-pipe');
-      expect(data.guildId).toBe('g-pipe');
+    expect(mockDebug).toHaveBeenCalledTimes(2);
+    for (const call of mockDebug.mock.calls) {
+      const [logObj] = call;
+      expect(logObj.correlationId).toBe('corr-pipe');
+      expect(logObj.guildId).toBe('g-pipe');
+      expect(logObj.metadata.operationType).toBe('pipeline');
     }
   });
 

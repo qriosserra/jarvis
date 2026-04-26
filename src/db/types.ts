@@ -122,27 +122,3 @@ export interface Embedding {
   createdAt: Date;
 }
 
-/** Status of a tracked operation. */
-export type OperationStatus = 'running' | 'completed' | 'failed';
-
-export interface OperationLog {
-  id: string;
-  interactionId: string | null;
-  correlationId: string | null;
-  guildId: string | null;
-  memberId: string | null;
-  membershipId: string | null;
-  operationName: string;
-  operationType: string;
-  parentOperationId: string | null;
-  providerName: string | null;
-  model: string | null;
-  status: OperationStatus;
-  durationMs: number | null;
-  providerDurationMs: number | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  startedAt: Date;
-  metadata: Record<string, unknown>;
-  createdAt: Date;
-}

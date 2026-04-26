@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { trace } from '@opentelemetry/api';
 import type { InteractionContext } from './types.js';
 import type { IntentOutcome } from './intent.js';
@@ -10,7 +9,7 @@ import { persistInteractionMemory, persistActionOutcomeMemory } from '../memory/
 import { ingestRequesterNames } from '../memory/identity.js';
 import { getContainer } from '../container.js';
 import { createLogger } from '../lib/logger.js';
-import { trackOperation, runTrackedPipeline, patchOperationInteractionId, type OperationContext } from '../lib/latency-tracker.js';
+import { trackOperation, runTrackedPipeline, type OperationContext } from '../lib/latency-tracker.js';
 import { OperationName, OperationType } from '../lib/operation-constants.js';
 import {
   interactionCounter,
@@ -20,14 +19,12 @@ import {
 
 const logger = createLogger('orchestrator');
 
-function opCtx(ctx: InteractionContext, parentOperationId?: string): OperationContext {
+function opCtx(ctx: InteractionContext): OperationContext {
   return {
     correlationId: ctx.correlationId,
     guildId: ctx.guildId,
     memberId: ctx.requester.id,
-    membershipId: ctx.membershipId,
     interactionId: ctx.interactionId,
-    parentOperationId,
   };
 }
 
@@ -43,7 +40,6 @@ function opCtx(ctx: InteractionContext, parentOperationId?: string): OperationCo
 export async function handleInteraction(ctx: InteractionContext): Promise<void> {
   const tracer = trace.getTracer('jarvis');
   const startMs = Date.now();
-  const rootOpId = randomUUID();
 
   return tracer.startActiveSpan('handleInteraction', async (span) => {
     span.setAttributes({
@@ -69,13 +65,12 @@ export async function handleInteraction(ctx: InteractionContext): Promise<void> 
       {
         operationName: OperationName.INTERACTION,
         operationType: OperationType.PIPELINE,
-        operationId: rootOpId,
         context: opCtx(ctx),
         metadata: { surface: ctx.surface, trigger: ctx.trigger },
       },
       async () => {
         try {
-          await runTrackedPipeline({ operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId) }, [
+          await runTrackedPipeline({ operationType: OperationType.PIPELINE, context: opCtx(ctx) }, [
             // Step 0a — ensure the guild row exists before any guild-scoped writes
             [OperationName.GUILD_BOOTSTRAP,      () => bootstrapGuild(ctx)],
             // Step 0a-2 — bootstrap user + guild membership so all downstream
@@ -89,19 +84,13 @@ export async function handleInteraction(ctx: InteractionContext): Promise<void> 
           // latency records and action outcomes can reference its UUID.
           await createEarlyInteraction(ctx);
 
-          // Patch the root operation row with the newly created interaction_id
-          if (ctx.interactionId) {
-            patchOperationInteractionId(rootOpId, ctx.interactionId).catch(() => {});
-          }
-
           // Step 0d — refresh identity records (non-blocking)
           ingestRequesterNames(ctx).catch(() => {});
 
           // Step 1 — intent interpretation
-          const intentOpId = randomUUID();
           const { result: intent } = await trackOperation(
-            { operationName: OperationName.INTENT_INTERPRETATION, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), operationId: intentOpId },
-            () => interpretIntent(ctx, intentOpId),
+            { operationName: OperationName.INTENT_INTERPRETATION, operationType: OperationType.PIPELINE, context: opCtx(ctx) },
+            () => interpretIntent(ctx),
           );
 
           span.setAttribute('jarvis.intent_kind', intent.kind);
@@ -116,16 +105,14 @@ export async function handleInteraction(ctx: InteractionContext): Promise<void> 
 
           // Step 2 — route by intent category
           if (isDeterministicIntent(intent)) {
-            const detOpId = randomUUID();
             await trackOperation(
-              { operationName: OperationName.DETERMINISTIC_ACTION, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), metadata: { intentKind: intent.kind }, operationId: detOpId },
-              () => executeDeterministicAction(ctx, intent, detOpId),
+              { operationName: OperationName.DETERMINISTIC_ACTION, operationType: OperationType.PIPELINE, context: opCtx(ctx), metadata: { intentKind: intent.kind } },
+              () => executeDeterministicAction(ctx, intent),
             );
           } else {
-            const convOpId = randomUUID();
             await trackOperation(
-              { operationName: OperationName.CONVERSATIONAL_RESPONSE, operationType: OperationType.PIPELINE, context: opCtx(ctx, rootOpId), metadata: { intentKind: intent.kind }, operationId: convOpId },
-              () => executeConversationalResponse(ctx, intent, convOpId),
+              { operationName: OperationName.CONVERSATIONAL_RESPONSE, operationType: OperationType.PIPELINE, context: opCtx(ctx), metadata: { intentKind: intent.kind } },
+              () => executeConversationalResponse(ctx, intent),
             );
           }
 
@@ -286,8 +273,8 @@ async function createEarlyInteraction(ctx: InteractionContext): Promise<void> {
  * Resolve what the user is asking for via the configured
  * interpretation LLM provider.
  */
-async function interpretIntent(ctx: InteractionContext, parentOperationId?: string): Promise<IntentOutcome> {
-  return llmInterpretIntent(ctx, parentOperationId);
+async function interpretIntent(ctx: InteractionContext): Promise<IntentOutcome> {
+  return llmInterpretIntent(ctx);
 }
 
 // ── Deterministic action executor ───────────────────────────────────
@@ -299,14 +286,13 @@ async function interpretIntent(ctx: InteractionContext, parentOperationId?: stri
 async function executeDeterministicAction(
   ctx: InteractionContext,
   intent: IntentOutcome,
-  parentOperationId?: string,
 ): Promise<void> {
   logger.info(
     { correlationId: ctx.correlationId, intentKind: intent.kind },
     'Routing to deterministic action handler',
   );
 
-  await executeAction(ctx, intent, parentOperationId);
+  await executeAction(ctx, intent);
 }
 
 // ── Conversational response path ────────────────────────────────────────
@@ -318,14 +304,13 @@ async function executeDeterministicAction(
 async function executeConversationalResponse(
   ctx: InteractionContext,
   intent: IntentOutcome,
-  parentOperationId?: string,
 ): Promise<void> {
   logger.info(
     { correlationId: ctx.correlationId, intentKind: intent.kind },
     'Routing to conversational response path',
   );
 
-  const responseText = await generateAndDeliver(ctx, intent, parentOperationId);
+  const responseText = await generateAndDeliver(ctx, intent);
 
   // Backfill response text on the early-created interaction row
   if (ctx.interactionId) {

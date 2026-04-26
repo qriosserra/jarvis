@@ -38,7 +38,6 @@ function respondCtx(ctx: InteractionContext): OperationContext {
 export async function generateAndDeliver(
   ctx: InteractionContext,
   intent: IntentOutcome,
-  parentOperationId?: string,
 ): Promise<string> {
   // Load persona
   const persona = await loadPersona(ctx.personaId);
@@ -46,7 +45,7 @@ export async function generateAndDeliver(
   // Retrieve memory context (best-effort)
   let memoryContext = '';
   try {
-    const retrieved = await retrieveContext(ctx, parentOperationId);
+    const retrieved = await retrieveContext(ctx);
     memoryContext = retrieved.formattedContext;
   } catch {
     // Non-critical — proceed without memory context
@@ -59,7 +58,7 @@ export async function generateAndDeliver(
   }
 
   // Text surface — generate, then deliver
-  const responseText = await generateResponseForIntent(ctx, intent, persona, memoryContext, parentOperationId);
+  const responseText = await generateResponseForIntent(ctx, intent, persona, memoryContext);
 
   await deliverTextReply(ctx, responseText);
   return responseText;
@@ -71,7 +70,6 @@ async function generateResponse(
   ctx: InteractionContext,
   persona: Persona | null,
   memoryContext: string = '',
-  parentOperationId?: string,
 ): Promise<string> {
   const container = getContainer();
   const { provider, model } = container.providers.getLlm('response');
@@ -94,7 +92,7 @@ async function generateResponse(
       operationType: OperationType.LLM,
       providerName: provider.name,
       model,
-      context: { ...respondCtx(ctx), parentOperationId },
+      context: respondCtx(ctx),
       metadata: { task: OperationMetadata.Task.RESPONSE },
     },
     () => provider.complete(messages, { model, temperature: 0.7, maxTokens: 1024 }),
@@ -136,7 +134,6 @@ async function generateResearchResponse(
   query: string,
   persona: Persona | null,
   memoryContext: string = '',
-  parentOperationId?: string,
 ): Promise<string> {
   const container = getContainer();
 
@@ -149,7 +146,7 @@ async function generateResearchResponse(
         operationName: OperationName.RESEARCH_SEARCH,
         operationType: OperationType.RESEARCH,
         providerName: researchProvider.name,
-        context: { ...respondCtx(ctx), parentOperationId },
+        context: respondCtx(ctx),
         metadata: { query },
       },
       () => researchProvider.search(query, { maxResults: 5 }),
@@ -194,7 +191,7 @@ async function generateResearchResponse(
       operationType: OperationType.LLM,
       providerName: provider.name,
       model,
-      context: { ...respondCtx(ctx), parentOperationId },
+      context: respondCtx(ctx),
       metadata: { task: OperationMetadata.Task.RESPONSE, researchAugmented: true },
     },
     () => provider.complete(messages, { model, temperature: 0.5, maxTokens: 1536 }),
@@ -236,16 +233,15 @@ async function generateResponseForIntent(
   intent: IntentOutcome,
   persona: Persona | null,
   memoryContext: string = '',
-  parentOperationId?: string,
 ): Promise<string> {
   switch (intent.kind) {
     case IntentKind.AskClarification:
       return intent.question;
     case IntentKind.ResearchAndRespond:
-      return generateResearchResponse(ctx, intent.query, persona, memoryContext, parentOperationId);
+      return generateResearchResponse(ctx, intent.query, persona, memoryContext);
     case IntentKind.Respond:
     default:
-      return generateResponse(ctx, persona, memoryContext, parentOperationId);
+      return generateResponse(ctx, persona, memoryContext);
   }
 }
 

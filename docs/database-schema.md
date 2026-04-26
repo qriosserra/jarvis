@@ -55,10 +55,10 @@ The normalized path is `guild` → `user` → `guild_membership`. Newer relation
 ### Action and observability relations
 
 - **`action_outcome`** records the result of an executed action for a specific interaction.
-- **`operation_log`** records structured operational telemetry for tracked work.
+- **`log`** stores unified structured log entries written by the Pino DB transport.
 - **`_migration`** tracks applied schema bootstrap markers.
 
-`operation_log` supports parent-child operation trees through `parent_operation_id` and records status, timing, provider, model, correlation, and free-form metadata. `duration_ms` captures total client-side elapsed time; `provider_duration_ms` captures the server-side processing time reported by the external API provider (e.g. `x-metrics-e2e-ms` from xAI) and is `NULL` when the provider does not expose this information or for non-API operations. `input_tokens` and `output_tokens` record the prompt and completion token counts reported by the LLM provider via `usage.promptTokens` and `usage.completionTokens`; both are `NULL` for non-LLM operations or when the provider does not report usage.
+`log` stores every structured log entry emitted by the application when `LOG_DB_ENABLED=true`. Each row captures the Pino log level (as text), the message, the originating module, an optional source location, contextual identifiers (`correlation_id`, `interaction_id`, `guild_id`, `member_id`), an optional `status` and `duration_ms` for tracked operations, and a JSONB `metadata` column for all remaining fields.
 
 ## Relationship Model
 
@@ -82,8 +82,8 @@ The schema emphasizes read paths used by the application runtime:
 
 - Recent interactions and memories are indexed by descending creation time.
 - Guild, member, interaction, and membership lookup paths are indexed explicitly.
-- Optional relations such as `membership_id`, `interaction_id`, and `parent_operation_id` use partial indexes where null values are common.
-- `operation_log.duration_ms`, `operation_log.provider_duration_ms`, `operation_log.input_tokens`, and `operation_log.output_tokens` are each constrained to non-negative values (or `NULL`).
+- Optional relations such as `membership_id` and `interaction_id` use partial indexes where null values are common.
+- `log` rows are indexed by `logged_at DESC`, `level`, `module`, `correlation_id`, `interaction_id`, and `guild_id`.
 
 The vector column on `embedding` is intentionally left unconstrained, so no HNSW index is created until the embedding dimension is fixed.
 

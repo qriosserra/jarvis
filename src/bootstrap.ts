@@ -18,7 +18,6 @@ import {
   IdentityAliasRepo,
   ActionOutcomeRepo,
   EmbeddingRepo,
-  OperationLogRepo,
   MemoryRetrieval,
 } from './db/repos.js';
 import { createQueues } from './queue/definitions.js';
@@ -29,7 +28,6 @@ import type { ProviderRegistry } from './providers/router.js';
 import { validateProviderConfig } from './providers/validation.js';
 import { createXaiLlmProvider, createXaiEmbeddingProvider } from './providers/xai.js';
 import { createVoyageEmbeddingProvider } from './providers/voyage.js';
-import { setLatencyRepoAccessor } from './lib/latency-tracker.js';
 
 const logger = createLogger('bootstrap');
 
@@ -85,12 +83,8 @@ export async function bootstrap(): Promise<BootstrapResult> {
     identityAliases: new IdentityAliasRepo(db),
     actionOutcomes: new ActionOutcomeRepo(db),
     embeddings: new EmbeddingRepo(db),
-    operationLog: new OperationLogRepo(db),
     memoryRetrieval: new MemoryRetrieval(db),
   };
-
-  // Wire latency tracker repo accessor
-  setLatencyRepoAccessor(() => repos.operationLog);
 
   // Provider registry
   const registry: ProviderRegistry = {

@@ -33,7 +33,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 ENV NODE_ENV=development
-CMD ["pnpm", "run", "dev"]
+CMD ["pnpm", "run", "dev:docker"]
 
 # ── Production stage ─────────────────────────────────────
 FROM base AS production

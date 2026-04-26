@@ -3,12 +3,8 @@ import type { Database } from './kysely.js';
 import type {
   Guild, Member, User, GuildMembership, Persona, Interaction,
   MemoryRecord, IdentityAlias, ActionOutcome, Embedding,
-  OperationLog, OperationStatus, Surface, MemoryCategory,
-  AliasType, AliasSource,
+  Surface, MemoryCategory, AliasType, AliasSource,
 } from './types.js';
-
-// Re-export domain types used by consumers
-export type { OperationStatus } from './types.js';
 
 type Db = Kysely<Database>;
 
@@ -608,104 +604,5 @@ export class MemoryRetrieval {
     if (filter.category) parts.push(sql`mr.category = ${filter.category}`);
     if (filter.since) parts.push(sql`mr.created_at >= ${filter.since}`);
     return sql.join(parts, sql` AND `);
-  }
-}
-
-// ── Operation Log ────────────────────────────────────────────────────
-
-export interface CreateOperationLogData {
-  id?: string | null;
-  interactionId?: string | null;
-  correlationId?: string | null;
-  guildId?: string | null;
-  memberId?: string | null;
-  membershipId?: string | null;
-  operationName: string;
-  operationType: string;
-  parentOperationId?: string | null;
-  providerName?: string | null;
-  model?: string | null;
-  status: OperationStatus;
-  durationMs?: number | null;
-  providerDurationMs?: number | null;
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  startedAt: Date;
-  createdAt: Date;
-  metadata?: Record<string, unknown>;
-}
-
-export class OperationLogRepo {
-  constructor(private db: Db) {}
-
-  async create(data: CreateOperationLogData): Promise<OperationLog> {
-    const metadataJson = JSON.stringify(data.metadata ?? {});
-    const { rows } = await sql<OperationLog>`
-      INSERT INTO operation_log (
-        id, interaction_id, correlation_id, guild_id, member_id, membership_id,
-        operation_name, operation_type, parent_operation_id,
-        provider_name, model, status, duration_ms, provider_duration_ms,
-        input_tokens, output_tokens, started_at, metadata, created_at
-      ) VALUES (
-        COALESCE(${data.id ?? null}, gen_random_uuid()),
-        ${data.interactionId ?? null}, ${data.correlationId ?? null},
-        ${data.guildId ?? null}, ${data.memberId ?? null}, ${data.membershipId ?? null},
-        ${data.operationName}, ${data.operationType}, ${data.parentOperationId ?? null},
-        ${data.providerName ?? null}, ${data.model ?? null}, ${data.status},
-        ${data.durationMs ?? null}, ${data.providerDurationMs ?? null},
-        ${data.inputTokens ?? null}, ${data.outputTokens ?? null}, ${data.startedAt}, ${metadataJson}::jsonb, ${data.createdAt}
-      )
-      RETURNING id, interaction_id AS "interactionId", correlation_id AS "correlationId",
-        guild_id AS "guildId", member_id AS "memberId", membership_id AS "membershipId",
-        operation_name AS "operationName", operation_type AS "operationType",
-        parent_operation_id AS "parentOperationId",
-        provider_name AS "providerName", model, status, duration_ms AS "durationMs",
-        provider_duration_ms AS "providerDurationMs",
-        input_tokens AS "inputTokens", output_tokens AS "outputTokens",
-        started_at AS "startedAt", metadata, created_at AS "createdAt"
-    `.execute(this.db);
-    return rows[0];
-  }
-
-  async patchInteractionId(id: string, interactionId: string): Promise<void> {
-    await this.db.updateTable('operation_log')
-      .set({ interactionId } as any)
-      .where('id', '=', id)
-      .execute();
-  }
-
-  async finalize(
-    id: string,
-    status: OperationStatus,
-    durationMs: number,
-    extra?: { providerName?: string | null; model?: string | null; providerDurationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null; metadata?: Record<string, unknown> },
-  ): Promise<void> {
-    let q = this.db.updateTable('operation_log')
-      .set({
-        status,
-        durationMs,
-      } as any)
-      .where('id', '=', id);
-
-    if (extra?.providerName !== undefined) {
-      q = q.set({ providerName: extra.providerName } as any);
-    }
-    if (extra?.model !== undefined) {
-      q = q.set({ model: extra.model } as any);
-    }
-    if (extra?.providerDurationMs !== undefined) {
-      q = q.set({ providerDurationMs: extra.providerDurationMs } as any);
-    }
-    if (extra?.inputTokens !== undefined) {
-      q = q.set({ inputTokens: extra.inputTokens } as any);
-    }
-    if (extra?.outputTokens !== undefined) {
-      q = q.set({ outputTokens: extra.outputTokens } as any);
-    }
-    if (extra?.metadata !== undefined) {
-      q = q.set({ metadata: JSON.stringify(extra.metadata) } as any);
-    }
-
-    await q.execute();
   }
 }

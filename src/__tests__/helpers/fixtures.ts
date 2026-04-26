@@ -12,7 +12,6 @@ import type {
   TtsResult,
 } from '../../providers/types.js';
 import type { InteractionContext } from '../../interaction/types.js';
-import { setLatencyRepoAccessor } from '../../lib/latency-tracker.js';
 
 // ── Stub providers ───────────────────────────────────────────────────
 
@@ -77,7 +76,7 @@ export function stubConfig(): AppConfig {
   return {
     env: 'test',
     logLevel: 'warn',
-    log: { consoleEnabled: false, fileEnabled: false, filePath: './logs/app.log' },
+    log: { consoleEnabled: false, fileEnabled: false, filePath: './logs/app.log', dbEnabled: false },
     discord: { token: 'test-token', clientId: 'test-client-id' },
     database: { url: 'postgresql://localhost/test' },
     redis: { url: 'redis://localhost' },
@@ -144,10 +143,6 @@ export function stubRepos(): Repos {
     } as any,
     embeddings: {
       create: vi.fn(async () => ({})),
-    } as any,
-    operationLog: {
-      create: vi.fn(async (data: any) => ({ id: 'ol-1', ...data })),
-      finalize: vi.fn(async () => {}),
     } as any,
     memoryRetrieval: {
       searchHybrid: vi.fn(async () => []),
@@ -309,7 +304,6 @@ export function stubMessage(overrides?: Partial<{
 
 export function stubContainer(overrides?: Partial<Container>): Container {
   const repos = overrides?.repos ?? stubRepos();
-  setLatencyRepoAccessor(() => repos.operationLog);
   return {
     config: stubConfig(),
     discord: stubDiscordClient(),

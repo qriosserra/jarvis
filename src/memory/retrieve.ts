@@ -34,7 +34,6 @@ export interface RetrievedContext {
  */
 export async function retrieveContext(
   ctx: InteractionContext,
-  parentOperationId?: string,
 ): Promise<RetrievedContext> {
   const container = getContainer();
 
@@ -50,7 +49,7 @@ export async function retrieveContext(
   // Retrieve memories
   let memories: ScoredMemory[] = [];
   try {
-    memories = await retrieveMemories(ctx, parentOperationId);
+    memories = await retrieveMemories(ctx);
   } catch (err) {
     logger.warn(
       { correlationId: ctx.correlationId, err },
@@ -74,7 +73,7 @@ export async function retrieveContext(
 
 // ── Memory retrieval ────────────────────────────────────────────────
 
-async function retrieveMemories(ctx: InteractionContext, parentOperationId?: string): Promise<ScoredMemory[]> {
+async function retrieveMemories(ctx: InteractionContext): Promise<ScoredMemory[]> {
   const container = getContainer();
   const retrieval = container.repos.memoryRetrieval;
 
@@ -98,7 +97,6 @@ async function retrieveMemories(ctx: InteractionContext, parentOperationId?: str
           guildId: ctx.guildId,
           memberId: ctx.requester.id,
           interactionId: ctx.interactionId,
-          parentOperationId,
         },
         metadata: { inputType: OperationMetadata.InputType.QUERY },
       },

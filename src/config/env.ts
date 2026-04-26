@@ -50,6 +50,7 @@ const envSchema = z.object({
   LOG_CONSOLE_ENABLED: z.coerce.boolean().default(true),
   LOG_FILE_ENABLED: z.coerce.boolean().default(false),
   LOG_FILE_PATH: z.string().default('./logs/app.log'),
+  LOG_DB_ENABLED: z.coerce.boolean().default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -62,6 +63,7 @@ export interface AppConfig {
     consoleEnabled: boolean;
     fileEnabled: boolean;
     filePath: string;
+    dbEnabled: boolean;
   };
 
   discord: {
@@ -129,6 +131,7 @@ export function loadConfig(): AppConfig {
       consoleEnabled: env.LOG_CONSOLE_ENABLED,
       fileEnabled: env.LOG_FILE_ENABLED,
       filePath: env.LOG_FILE_PATH,
+      dbEnabled: env.LOG_DB_ENABLED,
     },
 
     discord: {
