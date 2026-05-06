@@ -7,6 +7,7 @@ import { getContainer } from '../container.js';
 import type { InteractionContext } from '../interaction/types.js';
 import { setUtteranceHandler } from '../voice/connection.js';
 import { handleVoiceUtterance } from '../voice/speech-detect.js';
+import { withTypingIndicator } from './typing.js';
 
 const logger = createLogger('discord-events');
 
@@ -82,7 +83,7 @@ async function onMessageCreate(message: Message): Promise<void> {
     'Text interaction detected',
   );
 
-  await handleInteraction(ctx);
+  await withTypingIndicator(message.channel, () => handleInteraction(ctx));
 }
 
 // ── Voice-state handler ─────────────────────────────────────────────

@@ -1,10 +1,11 @@
-import type { GuildMember } from 'discord.js';
+import type { GuildMember, TextBasedChannel } from 'discord.js';
 import type { SpeakerUtterance } from './types.js';
 import type { InteractionContext } from '../interaction/types.js';
 import { handleInteraction } from '../interaction/orchestrator.js';
 import { runWithCorrelationId, getCorrelationId } from '../lib/correlation.js';
 import { getContainer, getDiscordClient } from '../container.js';
 import { createLogger } from '../lib/logger.js';
+import { withTypingIndicator } from '../discord/typing.js';
 
 const logger = createLogger('speech-detect');
 
@@ -159,6 +160,22 @@ export async function handleVoiceUtterance(utterance: SpeakerUtterance): Promise
       'Voice interaction detected',
     );
 
-    await handleInteraction(ctx);
+    const typingChannel = resolveVoiceTypingChannel(speaker);
+    if (typingChannel) {
+      await withTypingIndicator(typingChannel, () => handleInteraction(ctx));
+    } else {
+      await handleInteraction(ctx);
+    }
   });
+}
+
+/**
+ * Pick a text channel where the typing indicator can be shown for a
+ * voice interaction.  Voice channels themselves cannot host the
+ * indicator, so we fall back to the guild's configured system channel
+ * when one exists.  Returns `null` when no suitable text channel is
+ * available — the caller should then skip the indicator silently.
+ */
+function resolveVoiceTypingChannel(speaker: GuildMember): TextBasedChannel | null {
+  return speaker.guild.systemChannel ?? null;
 }
