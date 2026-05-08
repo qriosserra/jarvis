@@ -22,6 +22,12 @@ function baseConfig(overrides?: Partial<AppConfig>): AppConfig {
     tts: { provider: 'cartesia' },
     research: { provider: 'tavily' },
     persona: { default: 'jarvis' },
+    interaction: {
+      indirectDetectionEnabled: false,
+      indirectDetectionProvider: '',
+      indirectDetectionModel: '',
+      actionNaturalResponseEnabled: false,
+    },
     secrets: {
       xaiApiKey: 'xai-test',
       voyageApiKey: 'voyage-test',
@@ -108,6 +114,118 @@ describe('validateProviderConfig', () => {
     });
     const result = validateProviderConfig(cfg);
     expect(result.errors.some((e) => e.includes('XAI_API_KEY'))).toBe(false);
+  });
+
+  it('fails when indirect detection is enabled but provider is empty', () => {
+    const cfg = baseConfig({
+      interaction: {
+        indirectDetectionEnabled: true,
+        indirectDetectionProvider: '',
+        indirectDetectionModel: '',
+        actionNaturalResponseEnabled: false,
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.includes('LLM_INDIRECT_DETECTION_PROVIDER is required')),
+    ).toBe(true);
+  });
+
+  it('fails when indirect detection routes a provider whose secret is missing', () => {
+    const cfg = baseConfig({
+      interaction: {
+        indirectDetectionEnabled: true,
+        indirectDetectionProvider: 'openai',
+        indirectDetectionModel: '',
+        actionNaturalResponseEnabled: false,
+      },
+      // No openaiApiKey in secrets
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('OPENAI_API_KEY'))).toBe(true);
+  });
+
+  it('passes when indirect detection reuses an already-routed provider with a valid key', () => {
+    const cfg = baseConfig({
+      interaction: {
+        indirectDetectionEnabled: true,
+        indirectDetectionProvider: 'xai',
+        indirectDetectionModel: 'grok-3-mini',
+        actionNaturalResponseEnabled: false,
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails when indirect detection is enabled but model is empty', () => {
+    const cfg = baseConfig({
+      interaction: {
+        indirectDetectionEnabled: true,
+        indirectDetectionProvider: 'xai',
+        indirectDetectionModel: '',
+        actionNaturalResponseEnabled: false,
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.includes('LLM_INDIRECT_DETECTION_MODEL is required')),
+    ).toBe(true);
+  });
+
+  it('fails when LLM_INTERPRETATION_MODEL is empty', () => {
+    const cfg = baseConfig({
+      llm: {
+        interpretation: { provider: 'xai', model: '' },
+        response: { provider: 'xai', model: 'grok-3-mini' },
+        embedding: { provider: 'voyage', model: 'voyage-4-lite' },
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('LLM_INTERPRETATION_MODEL is required'))).toBe(true);
+  });
+
+  it('fails when LLM_RESPONSE_MODEL is empty', () => {
+    const cfg = baseConfig({
+      llm: {
+        interpretation: { provider: 'xai', model: 'grok-3-mini' },
+        response: { provider: 'xai', model: '' },
+        embedding: { provider: 'voyage', model: 'voyage-4-lite' },
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('LLM_RESPONSE_MODEL is required'))).toBe(true);
+  });
+
+  it('fails when LLM_EMBEDDING_MODEL is empty', () => {
+    const cfg = baseConfig({
+      llm: {
+        interpretation: { provider: 'xai', model: 'grok-3-mini' },
+        response: { provider: 'xai', model: 'grok-3-mini' },
+        embedding: { provider: 'voyage', model: '' },
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('LLM_EMBEDDING_MODEL is required'))).toBe(true);
+  });
+
+  it('ignores indirect detection provider when the feature is disabled', () => {
+    const cfg = baseConfig({
+      interaction: {
+        indirectDetectionEnabled: false,
+        indirectDetectionProvider: 'openai', // would need OPENAI_API_KEY if enabled
+        indirectDetectionModel: '',
+        actionNaturalResponseEnabled: false,
+      },
+    });
+    const result = validateProviderConfig(cfg);
+    expect(result.errors.some((e) => e.includes('OPENAI_API_KEY'))).toBe(false);
   });
 });
 

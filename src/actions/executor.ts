@@ -17,6 +17,7 @@ import { getContainer, getDiscordClient } from '../container.js';
 import { persistActionOutcomeMemory } from '../memory/persist.js';
 import { checkMemorySafety } from '../memory/safety.js';
 import { actionOutcomeCounter } from '../lib/metrics.js';
+import { generateNaturalActionResponse } from '../conversation/respond.js';
 
 const logger = createLogger('action-executor');
 
@@ -185,8 +186,15 @@ async function sendAndRecord(
     result.success ? 'Action succeeded' : 'Action failed',
   );
 
+  // When enabled (and not in CLI/simulation), let the response LLM
+  // rephrase the factual outcome in the active persona's voice. The
+  // original `result.message` is still used for the DB `error_message`
+  // column on failure (factual record), and as fallback if the LLM call
+  // throws.
+  const deliveredMessage = await resolveDeliveredMessage(ctx, intent, result);
+
   // Send reply to user
-  await sendReply(ctx, result.message);
+  await sendReply(ctx, deliveredMessage);
 
   // Reuse early-created interaction row; backfill response text and persist outcome
   const interactionId = ctx.interactionId;
@@ -195,7 +203,7 @@ async function sendAndRecord(
 
     // Backfill response text on the early-created interaction row
     if (interactionId) {
-      await container.repos.interactions.update(interactionId, { responseText: result.message });
+      await container.repos.interactions.update(interactionId, { responseText: deliveredMessage });
     }
 
     if (interactionId) {
@@ -218,11 +226,47 @@ async function sendAndRecord(
 
   // Persist as a memory record for future context (non-blocking)
   if (!ctx.skipMemoryPersistence) {
-    const memoryTask = persistActionOutcomeMemory(ctx, intent.kind, result.success, result.message, interactionId).catch(() => {});
+    const memoryTask = persistActionOutcomeMemory(ctx, intent.kind, result.success, deliveredMessage, interactionId).catch(() => {});
     if (ctx.backgroundTasks) {
       ctx.backgroundTasks.push(memoryTask);
     }
   }
 
   return result;
+}
+
+// ── Natural-response gating ─────────────────────────────────────────
+
+/**
+ * Decide what message is actually sent to the user for an action outcome.
+ *
+ * - Simulated runs (CLI/tests) always use the factual hard-coded message.
+ * - When `ACTION_NATURAL_RESPONSE_ENABLED=false`, behaviour is unchanged.
+ * - When `true`, the response LLM rephrases the outcome in the active
+ *   persona's voice; on failure of that LLM call, we fall back to the
+ *   factual message so the user still gets a reply.
+ */
+async function resolveDeliveredMessage(
+  ctx: InteractionContext,
+  intent: IntentOutcome,
+  result: ActionResult,
+): Promise<string> {
+  if (ctx.simulateActions) {
+    return result.message;
+  }
+
+  const { config } = getContainer();
+  if (!config.interaction.actionNaturalResponseEnabled) {
+    return result.message;
+  }
+
+  try {
+    return await generateNaturalActionResponse(ctx, intent, result);
+  } catch (err) {
+    logger.warn(
+      { correlationId: ctx.correlationId, intentKind: intent.kind, err },
+      'Natural action response generation failed, falling back to factual message',
+    );
+    return result.message;
+  }
 }

@@ -21,6 +21,8 @@ const envSchema = z.object({
   LLM_RESPONSE_MODEL: z.string().default('grok-3-mini'),
   LLM_EMBEDDING_PROVIDER: z.string().default('voyage'),
   LLM_EMBEDDING_MODEL: z.string().default('voyage-4-lite'),
+  LLM_INDIRECT_DETECTION_PROVIDER: z.string().default(''),
+  LLM_INDIRECT_DETECTION_MODEL: z.string().default(''),
   OPENAI_API_KEY: z.string().optional(),
   XAI_API_KEY: z.string().optional(),
   VOYAGE_API_KEY: z.string().optional(),
@@ -51,6 +53,11 @@ const envSchema = z.object({
   LOG_FILE_ENABLED: z.coerce.boolean().default(false),
   LOG_FILE_PATH: z.string().default('./logs/app.log'),
   LOG_DB_ENABLED: z.coerce.boolean().default(false),
+
+  // Interaction
+  INDIRECT_DETECTION_ENABLED: z.coerce.boolean().default(false),
+  ACTION_NATURAL_RESPONSE_ENABLED: z.coerce.boolean().default(false),
+  RESPOND_TO_ALL_MESSAGES: z.coerce.boolean().default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -99,6 +106,14 @@ export interface AppConfig {
 
   persona: {
     default: string;
+  };
+
+  interaction: {
+    indirectDetectionEnabled: boolean;
+    indirectDetectionProvider: string;
+    indirectDetectionModel: string;
+    actionNaturalResponseEnabled: boolean;
+    respondToAllMessages: boolean;
   };
 
   secrets: {
@@ -176,6 +191,14 @@ export function loadConfig(): AppConfig {
 
     persona: {
       default: env.DEFAULT_PERSONA,
+    },
+
+    interaction: {
+      indirectDetectionEnabled: env.INDIRECT_DETECTION_ENABLED,
+      indirectDetectionProvider: env.LLM_INDIRECT_DETECTION_PROVIDER,
+      indirectDetectionModel: env.LLM_INDIRECT_DETECTION_MODEL,
+      actionNaturalResponseEnabled: env.ACTION_NATURAL_RESPONSE_ENABLED,
+      respondToAllMessages: env.RESPOND_TO_ALL_MESSAGES,
     },
 
     secrets: {

@@ -45,8 +45,55 @@ describe('buildInterpretationContext', () => {
     expect(ctx).toContain('nl');
   });
 
-  it('returns empty string when no persona or language', () => {
+  it('returns empty string when no persona, language, name, or history', () => {
     expect(buildInterpretationContext(null)).toBe('');
+    expect(buildInterpretationContext(null, undefined, null, [])).toBe('');
+  });
+
+  describe('requesterName and recentHistory', () => {
+    it('includes requesterName when provided', () => {
+      const ctx = buildInterpretationContext(null, undefined, 'Quentin');
+      expect(ctx).toContain('"Quentin"');
+      expect(ctx).toContain('refer to themselves indirectly');
+    });
+
+    it('omits requesterName block when null or undefined', () => {
+      expect(buildInterpretationContext(null, undefined, null)).toBe('');
+      expect(buildInterpretationContext(null, undefined, undefined)).toBe('');
+    });
+
+    it('renders recentHistory as User/Jarvis pairs', () => {
+      const history = [
+        { requestText: 'hello there', responseText: 'Hi, how can I help?' },
+        { requestText: 'what time is it?', responseText: 'It is 3 PM.' },
+      ];
+      const ctx = buildInterpretationContext(null, undefined, null, history);
+      expect(ctx).toContain('## Recent conversation');
+      expect(ctx).toContain('User: hello there');
+      expect(ctx).toContain('Jarvis: Hi, how can I help?');
+      expect(ctx).toContain('User: what time is it?');
+      expect(ctx).toContain('Jarvis: It is 3 PM.');
+    });
+
+    it('omits the recent conversation block for an empty history array', () => {
+      const ctx = buildInterpretationContext(null, undefined, null, []);
+      expect(ctx).not.toContain('## Recent conversation');
+    });
+
+    it('combines requesterName, persona, language, and history in one prompt', () => {
+      const ctx = buildInterpretationContext(
+        fakePersona(),
+        'fr',
+        'Quentin',
+        [{ requestText: 'salut', responseText: 'Bonjour Quentin.' }],
+      );
+      expect(ctx).toContain('"Quentin"');
+      expect(ctx).toContain('Alfred');
+      expect(ctx).toContain('fr');
+      expect(ctx).toContain('## Recent conversation');
+      expect(ctx).toContain('User: salut');
+      expect(ctx).toContain('Jarvis: Bonjour Quentin.');
+    });
   });
 });
 

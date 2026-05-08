@@ -16,7 +16,7 @@ export interface EmbeddingWorkerDeps {
   redis: Redis;
   db: Kysely<Database>;
   embeddingProvider: EmbeddingProvider;
-  embeddingModel?: string;
+  embeddingModel: string;
 }
 
 export function startEmbeddingWorker(deps: EmbeddingWorkerDeps): Worker<EmbeddingJobData> {

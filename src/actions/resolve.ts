@@ -122,6 +122,13 @@ export function resolveDefaultTextChannel(guild: Guild): TextChannel | null {
 const MEMBER_MENTION_RE = /^<@!?(\d+)>$/;
 
 /**
+ * Canonical marker emitted by the LLM when the user refers to themselves
+ * (e.g. "me", "moi"). Handlers normalise this to the requester's Discord ID
+ * before calling resolveMember.
+ */
+export const SELF_REF = '@self';
+
+/**
  * Resolve a human-readable or ID reference to a single guild member.
  * Returns ambiguous when multiple members match.
  */

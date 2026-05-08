@@ -4,6 +4,7 @@ import { IntentKind, type IntentOutcome } from '../interaction/intent.js';
 import type { LlmMessage } from '../providers/types.js';
 import type { Persona } from '../db/types.js';
 import { getContainer } from '../container.js';
+import { selectBestName } from '../memory/identity.js';
 import { INTERPRETATION_SYSTEM_PROMPT, buildInterpretationContext } from './prompts.js';
 import { createLogger, captureCallSite } from '../lib/logger.js';
 import { trackOperation, formatTokens, formatDuration, formatLength } from '../lib/latency-tracker.js';
@@ -23,9 +24,26 @@ export async function interpretIntent(ctx: InteractionContext): Promise<IntentOu
   const container = getContainer();
   const { provider, model } = container.providers.getLlm('interpretation');
 
-  // Load persona for name-aware classification
-  const persona = await loadPersona(ctx.personaId);
-  const extraContext = buildInterpretationContext(persona, ctx.language);
+  // Load persona, requester identity, and recent conversation history
+  // for name-aware and reference-aware classification. All lookups are
+  // best-effort — interpretation must still proceed if any one fails.
+  const [persona, requesterName, recentHistory] = await Promise.all([
+    loadPersona(ctx.personaId),
+    selectBestName(ctx.requester.id, ctx.guildId)
+      .then((r) => r?.name ?? null)
+      .catch(() => null),
+    container.repos.interactions
+      .listByGuild(ctx.guildId, { memberId: ctx.requester.id, limit: 5 })
+      .then((rows) => rows.filter((r) => r.responseText).reverse())
+      .catch(() => []),
+  ]);
+
+  const extraContext = buildInterpretationContext(
+    persona,
+    ctx.language,
+    requesterName,
+    recentHistory,
+  );
 
   const messages: LlmMessage[] = [
     { role: 'system', content: INTERPRETATION_SYSTEM_PROMPT + (extraContext ? '\n\n' + extraContext : '') },

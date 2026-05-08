@@ -2,7 +2,7 @@ import type { Message } from 'discord.js';
 import type { Surface } from '../db/types.js';
 
 /** How a request was detected. */
-export type RequestTrigger = 'mention' | 'reply' | 'indirect' | 'voice-addressed';
+export type RequestTrigger = 'mention' | 'reply' | 'indirect' | 'voice-addressed' | 'dev-all';
 
 /** Minimal requester identity carried through the interaction pipeline. */
 export interface Requester {

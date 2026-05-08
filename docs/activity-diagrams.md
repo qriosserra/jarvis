@@ -247,13 +247,19 @@ else (no)
   endif
 endif
 
-:sendReply(ctx, result.message)\n(sourceMessage.reply → channel.send fallback);
+if (ACTION_NATURAL_RESPONSE_ENABLED && !simulateActions?) then (yes)
+  :generateNaturalActionResponse\n(persona prompt + action outcome context)\n→ deliveredMessage = LLM output;
+else (no)
+  :deliveredMessage = result.message;
+endif
 
-:Backfill interaction.response_text (DB);
-:Create action_outcome row (DB);
+:sendReply(ctx, deliveredMessage)\n(sourceMessage.reply → channel.send fallback);
+
+:Backfill interaction.response_text\n← deliveredMessage (DB);
+:Create action_outcome row (DB)\nerror_message ← result.message on failure;
 :Record actionOutcomeCounter metric;
 
-:Enqueue action outcome memory (fire-and-forget);
+:Enqueue action outcome memory\n(content ← deliveredMessage, fire-and-forget);
 
 stop
 @enduml

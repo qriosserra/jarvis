@@ -4,7 +4,8 @@ import { IntentKind, type IntentOutcome } from '../interaction/intent.js';
 import type { LlmMessage } from '../providers/types.js';
 import type { Persona } from '../db/types.js';
 import { getContainer, getDiscordClient } from '../container.js';
-import { buildResponseSystemPrompt, buildResearchContext } from './prompts.js';
+import { buildResponseSystemPrompt, buildResearchContext, buildActionOutcomeContext } from './prompts.js';
+import type { ActionResult } from '../actions/types.js';
 import { retrieveContext } from '../memory/retrieve.js';
 import { getActiveConnection } from '../voice/connection.js';
 import { speakWithAcknowledgement } from '../voice/playback.js';
@@ -158,7 +159,7 @@ async function generateResearchResponse(
       'Research results retrieved',
     );
 
-    researchContext = buildResearchContext(results);
+    researchContext = buildResearchContext(results, { citations: ctx.surface !== 'voice' });
   } catch (err) {
     providerErrorCounter.add(1, { type: 'research', task: 'search' });
     logger.warn(
@@ -344,6 +345,75 @@ async function deliverTextReply(ctx: InteractionContext, text: string): Promise<
       'Failed to send response to channel',
     );
   }
+}
+
+// ── Action outcome → natural-language reply ─────────────────────────
+
+/**
+ * Rephrase a deterministic action outcome in the active persona's voice.
+ *
+ * Used by the action executor when `ACTION_NATURAL_RESPONSE_ENABLED=true`
+ * to replace the hard-coded factual `result.message` with a persona-aware
+ * acknowledgement. The factual message is still injected as grounding via
+ * `buildActionOutcomeContext`.
+ */
+export async function generateNaturalActionResponse(
+  ctx: InteractionContext,
+  intent: IntentOutcome,
+  result: ActionResult,
+): Promise<string> {
+  const persona = await loadPersona(ctx.personaId);
+
+  const container = getContainer();
+  const { provider, model } = container.providers.getLlm('response');
+
+  const systemPrompt = buildResponseSystemPrompt(persona, ctx.language);
+  const outcomeContext = buildActionOutcomeContext(intent.kind, result);
+
+  const messages: LlmMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'system', content: outcomeContext },
+    { role: 'user', content: ctx.requestText },
+  ];
+
+  const { result: response, durationMs } = await trackOperation(
+    {
+      operationName: OperationName.LLM_ACTION_RESPONSE,
+      operationType: OperationType.LLM,
+      providerName: provider.name,
+      model,
+      context: respondCtx(ctx),
+      metadata: { task: OperationMetadata.Task.RESPONSE, intentKind: intent.kind, success: result.success },
+    },
+    () => provider.complete(messages, { model, temperature: 0.7, maxTokens: 512 }),
+    (resp) => ({
+      providerDurationMs: resp.providerDurationMs ?? null,
+      inputTokens: resp.usage?.promptTokens ?? null,
+      outputTokens: resp.usage?.completionTokens ?? null,
+    }),
+  );
+  llmLatency.record(durationMs, { task: 'response', provider: provider.name });
+
+  const promptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+
+  logger.debug(
+    {
+      source: captureCallSite('generateNaturalActionResponse'),
+      model: `${provider.name} | ${response.model}`,
+      duration: formatDuration(durationMs, response.providerDurationMs),
+      chars: formatLength(promptChars, response.content.length),
+      tokens: formatTokens(
+        response.usage?.promptTokens,
+        response.usage?.completionTokens,
+      ),
+      prompt: messages,
+      response: response.content,
+      correlationId: ctx.correlationId,
+    },
+    'LLM action response',
+  );
+
+  return response.content;
 }
 
 // ── Persona loading ─────────────────────────────────────────────────

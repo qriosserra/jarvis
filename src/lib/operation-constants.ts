@@ -23,6 +23,7 @@ export const OperationName = {
   LLM_INTERPRETATION: 'llm_interpretation',
   LLM_RESPONSE: 'llm_response',
   LLM_RESEARCH_RESPONSE: 'llm_research_response',
+  LLM_ACTION_RESPONSE: 'llm_action_response',
   LLM_MEMORY_EXTRACTION: 'llm_memory_extraction',
 
   // Research — external search

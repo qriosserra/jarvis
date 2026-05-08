@@ -17,7 +17,7 @@ export interface LlmProvider {
   readonly name: string;
 
   /** Generate a completion from a message history. */
-  complete(messages: LlmMessage[], opts?: { model?: string; temperature?: number; maxTokens?: number }): Promise<LlmResponse>;
+  complete(messages: LlmMessage[], opts: { model: string; temperature?: number; maxTokens?: number }): Promise<LlmResponse>;
 }
 
 // ── STT Provider ──────────────────────────────────────────────────────
@@ -105,8 +105,8 @@ export interface EmbeddingProvider {
   readonly name: string;
 
   /** Generate an embedding vector for the given text. */
-  embed(text: string, opts?: { model?: string; inputType?: 'query' | 'document' }): Promise<EmbeddingResult>;
+  embed(text: string, opts: { model: string; inputType?: 'query' | 'document' }): Promise<EmbeddingResult>;
 
   /** Generate embeddings for multiple texts in a single call. */
-  embedBatch(texts: string[], opts?: { model?: string; inputType?: 'query' | 'document' }): Promise<EmbeddingResult[]>;
+  embedBatch(texts: string[], opts: { model: string; inputType?: 'query' | 'document' }): Promise<EmbeddingResult[]>;
 }

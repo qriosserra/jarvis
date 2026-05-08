@@ -19,8 +19,39 @@ export function validateProviderConfig(config: AppConfig): ValidationResult {
   const errors: string[] = [];
   const routes = ProviderRouter.fromConfig(config);
 
+  // Indirect detection is opt-in and not represented in the route table;
+  // when enabled, treat its configured provider as another consumer for the
+  // purpose of secret validation.
+  const indirectProviderName = config.interaction.indirectDetectionEnabled
+    ? config.interaction.indirectDetectionProvider
+    : '';
+
+  if (config.interaction.indirectDetectionEnabled && !indirectProviderName) {
+    errors.push(
+      'LLM_INDIRECT_DETECTION_PROVIDER is required when INDIRECT_DETECTION_ENABLED=true',
+    );
+  }
+
+  if (config.interaction.indirectDetectionEnabled && !config.interaction.indirectDetectionModel) {
+    errors.push(
+      'LLM_INDIRECT_DETECTION_MODEL is required when INDIRECT_DETECTION_ENABLED=true',
+    );
+  }
+
+  if (!config.llm.interpretation.model) {
+    errors.push('LLM_INTERPRETATION_MODEL is required');
+  }
+
+  if (!config.llm.response.model) {
+    errors.push('LLM_RESPONSE_MODEL is required');
+  }
+
+  if (!config.llm.embedding.model) {
+    errors.push('LLM_EMBEDDING_MODEL is required');
+  }
+
   const needsProvider = (name: string) =>
-    routes.some((r) => r.providerName === name);
+    routes.some((r) => r.providerName === name) || indirectProviderName === name;
 
   if (needsProvider('openai') && !config.secrets.openaiApiKey) {
     errors.push('OPENAI_API_KEY is required when using the OpenAI provider');

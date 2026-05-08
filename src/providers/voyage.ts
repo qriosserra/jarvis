@@ -17,20 +17,18 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
 
   async embed(
     text: string,
-    opts?: { model?: string; inputType?: 'query' | 'document' },
+    opts: { model: string; inputType?: 'query' | 'document' },
   ): Promise<EmbeddingResult> {
-    const model = opts?.model ?? 'voyage-4-lite';
-    const results = await this.callEmbeddingApi([text], model, opts?.inputType);
+    const results = await this.callEmbeddingApi([text], opts.model, opts.inputType);
     return results[0];
   }
 
   async embedBatch(
     texts: string[],
-    opts?: { model?: string; inputType?: 'query' | 'document' },
+    opts: { model: string; inputType?: 'query' | 'document' },
   ): Promise<EmbeddingResult[]> {
     if (texts.length === 0) return [];
-    const model = opts?.model ?? 'voyage-4-lite';
-    return this.callEmbeddingApi(texts, model, opts?.inputType);
+    return this.callEmbeddingApi(texts, opts.model, opts.inputType);
   }
 
   private async callEmbeddingApi(

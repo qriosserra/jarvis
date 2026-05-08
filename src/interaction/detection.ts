@@ -1,13 +1,31 @@
 import type { Message } from 'discord.js';
 import { createLogger } from '../lib/logger.js';
+import type { LlmProvider } from '../providers/types.js';
 
 const logger = createLogger('detection');
+
+// ── Indirect classifier constants ──────────────────────────────────────
+
+const INDIRECT_CLASSIFIER_SYSTEM_PROMPT =
+  'You are a classifier. Reply with exactly YES or NO.';
+
+const INDIRECT_CLASSIFIER_TEMPERATURE = 0;
+const INDIRECT_CLASSIFIER_MAX_TOKENS = 5;
+const INDIRECT_CLASSIFIER_POSITIVE_TOKEN = 'YES';
+
+function buildIndirectClassifierUserPrompt(content: string): string {
+  return (
+    'Is this Discord message directed at an AI assistant (asking a question, ' +
+    'requesting help, or expecting a bot reply)?\n' +
+    `Message: "${content}"`
+  );
+}
 
 // ── Detection result ───────────────────────────────────────────────────
 
 export type TextDetectionResult =
   | { isForJarvis: false }
-  | { isForJarvis: true; trigger: 'mention' | 'reply' | 'indirect' };
+  | { isForJarvis: true; trigger: 'mention' | 'reply' | 'indirect' | 'dev-all' };
 
 // ── Public API ─────────────────────────────────────────────────────────
 
@@ -37,6 +55,69 @@ export function detectTextRequest(
   }
 
   return { isForJarvis: false };
+}
+
+/**
+ * LLM-based classifier for indirect requests — messages that do not
+ * @mention the bot nor reply to it but are nonetheless addressed to an
+ * AI assistant.
+ *
+ * Uses a tiny deterministic prompt (temperature 0, maxTokens 5) and
+ * parses the single-token response: "YES" → indirect request, anything
+ * else → not a request. Any provider error is treated as a negative
+ * classification (fail-safe — never trigger Jarvis on a failed call).
+ *
+ * Callers are expected to invoke this only when
+ * `config.interaction.indirectDetectionEnabled` is `true` and after the
+ * cheap synchronous triggers in `detectTextRequest` have already
+ * returned `{ isForJarvis: false }`.
+ */
+export async function detectIndirectRequest(
+  message: Message,
+  provider: LlmProvider,
+  model: string,
+): Promise<TextDetectionResult> {
+  const content = message.content?.trim() ?? '';
+  if (!content) {
+    return { isForJarvis: false };
+  }
+
+  try {
+    const response = await provider.complete(
+      [
+        { role: 'system', content: INDIRECT_CLASSIFIER_SYSTEM_PROMPT },
+        { role: 'user', content: buildIndirectClassifierUserPrompt(content) },
+      ],
+      {
+        model,
+        temperature: INDIRECT_CLASSIFIER_TEMPERATURE,
+        maxTokens: INDIRECT_CLASSIFIER_MAX_TOKENS,
+      },
+    );
+
+    const verdict = response.content.trim().toUpperCase();
+    const isForJarvis = verdict.startsWith(INDIRECT_CLASSIFIER_POSITIVE_TOKEN);
+
+    logger.debug(
+      {
+        messageId: message.id,
+        verdict,
+        isForJarvis,
+        model: response.model,
+      },
+      'Indirect request classification complete',
+    );
+
+    return isForJarvis
+      ? { isForJarvis: true, trigger: 'indirect' }
+      : { isForJarvis: false };
+  } catch (err) {
+    logger.warn(
+      { err, messageId: message.id },
+      'Indirect request classifier failed — treating as non-request',
+    );
+    return { isForJarvis: false };
+  }
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   resolveTextChannel,
   resolveDefaultTextChannel,
   resolveMember,
+  SELF_REF,
 } from './resolve.js';
 import { formatResolveError } from './errors.js';
 import { joinAndListen } from '../voice/connection.js';
@@ -141,8 +142,9 @@ export async function handleMoveMember(
   guild: Guild,
   botMember: GuildMember,
 ): Promise<ActionResult> {
+  const ref = intent.targetRef === SELF_REF ? ctx.requester.id : intent.targetRef;
   const [memberResult, channelResult] = await Promise.all([
-    resolveMember(guild, intent.targetRef),
+    resolveMember(guild, ref),
     resolveVoiceChannel(guild, intent.destinationRef),
   ]);
 
@@ -201,7 +203,8 @@ export async function handleMuteMember(
   guild: Guild,
   botMember: GuildMember,
 ): Promise<ActionResult> {
-  const resolved = await resolveMember(guild, intent.targetRef);
+  const ref = intent.targetRef === SELF_REF ? ctx.requester.id : intent.targetRef;
+  const resolved = await resolveMember(guild, ref);
   if (resolved.status !== 'found') {
     return formatResolveError('member', resolved);
   }
@@ -249,7 +252,8 @@ export async function handleDeafenMember(
   guild: Guild,
   botMember: GuildMember,
 ): Promise<ActionResult> {
-  const resolved = await resolveMember(guild, intent.targetRef);
+  const ref = intent.targetRef === SELF_REF ? ctx.requester.id : intent.targetRef;
+  const resolved = await resolveMember(guild, ref);
   if (resolved.status !== 'found') {
     return formatResolveError('member', resolved);
   }
@@ -297,7 +301,8 @@ export async function handleRenameMember(
   guild: Guild,
   botMember: GuildMember,
 ): Promise<ActionResult> {
-  const resolved = await resolveMember(guild, intent.targetRef);
+  const ref = intent.targetRef === SELF_REF ? ctx.requester.id : intent.targetRef;
+  const resolved = await resolveMember(guild, ref);
   if (resolved.status !== 'found') {
     return formatResolveError('member', resolved);
   }

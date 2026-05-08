@@ -37,3 +37,8 @@ export {
   VoyageEmbeddingProvider,
   createVoyageEmbeddingProvider,
 } from './voyage.js';
+
+export {
+  TavilyResearchProvider,
+  createTavilyResearchProvider,
+} from './tavily.js';

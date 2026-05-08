@@ -89,6 +89,12 @@ export function stubConfig(): AppConfig {
     tts: { provider: 'stub-tts' },
     research: { provider: 'stub-research' },
     persona: { default: 'jarvis' },
+    interaction: {
+      indirectDetectionEnabled: false,
+      indirectDetectionProvider: '',
+      indirectDetectionModel: '',
+      actionNaturalResponseEnabled: false,
+    },
     secrets: {},
   };
 }
@@ -130,6 +136,7 @@ export function stubRepos(): Repos {
       create: vi.fn(async (data: any) => ({ id: 'int-1', ...data })),
       update: vi.fn(async () => {}),
       updateResponse: vi.fn(async () => {}),
+      listByGuild: vi.fn(async () => []),
     } as any,
     memoryRecords: {
       create: vi.fn(async (data: any) => ({ id: 'mr-1', ...data })),

@@ -66,7 +66,7 @@ describe('XaiLlmProvider', () => {
 
     const provider = new XaiLlmProvider('bad-key');
     await expect(
-      provider.complete([{ role: 'user', content: 'hi' }]),
+      provider.complete([{ role: 'user', content: 'hi' }], { model: 'grok-3-mini' }),
     ).rejects.toThrow('xAI chat completions failed (401)');
   });
 
@@ -75,7 +75,7 @@ describe('XaiLlmProvider', () => {
 
     const provider = new XaiLlmProvider('test-key');
     await expect(
-      provider.complete([{ role: 'user', content: 'hi' }]),
+      provider.complete([{ role: 'user', content: 'hi' }], { model: 'grok-3-mini' }),
     ).rejects.toThrow('no choices');
   });
 
@@ -128,7 +128,7 @@ describe('XaiEmbeddingProvider', () => {
     globalThis.fetch = mockFetchResponse(responseBody, 200, {}) as any;
 
     const provider = new XaiEmbeddingProvider('test-key');
-    const results = await provider.embedBatch(['a', 'b']);
+    const results = await provider.embedBatch(['a', 'b'], { model: 'v2' });
 
     expect(results).toHaveLength(2);
     // Should be sorted by index
@@ -138,7 +138,7 @@ describe('XaiEmbeddingProvider', () => {
 
   it('returns empty array for empty batch', async () => {
     const provider = new XaiEmbeddingProvider('test-key');
-    const results = await provider.embedBatch([]);
+    const results = await provider.embedBatch([], { model: 'v2' });
     expect(results).toEqual([]);
   });
 
@@ -146,14 +146,14 @@ describe('XaiEmbeddingProvider', () => {
     globalThis.fetch = mockFetchResponse({ error: 'bad' }, 500) as any;
 
     const provider = new XaiEmbeddingProvider('test-key');
-    await expect(provider.embed('hi')).rejects.toThrow('xAI embeddings failed (500)');
+    await expect(provider.embed('hi', { model: 'v2' })).rejects.toThrow('xAI embeddings failed (500)');
   });
 
   it('throws when no data returned', async () => {
     globalThis.fetch = mockFetchResponse({ data: [] }) as any;
 
     const provider = new XaiEmbeddingProvider('test-key');
-    await expect(provider.embed('hi')).rejects.toThrow('no data');
+    await expect(provider.embed('hi', { model: 'v2' })).rejects.toThrow('no data');
   });
 
   it('has name "xai"', () => {

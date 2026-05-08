@@ -1,7 +1,12 @@
 import type { Client, Message, VoiceState } from 'discord.js';
 import { createLogger } from '../lib/logger.js';
 import { runWithCorrelationId, getCorrelationId } from '../lib/correlation.js';
-import { detectTextRequest, extractRequestText } from '../interaction/detection.js';
+import {
+  detectTextRequest,
+  detectIndirectRequest,
+  extractRequestText,
+  type TextDetectionResult,
+} from '../interaction/detection.js';
 import { handleInteraction } from '../interaction/orchestrator.js';
 import { getContainer } from '../container.js';
 import type { InteractionContext } from '../interaction/types.js';
@@ -49,7 +54,17 @@ async function onMessageCreate(message: Message): Promise<void> {
   const botUserId = container.discord?.user?.id;
   if (!botUserId) return;
 
-  const detection = detectTextRequest(message, botUserId);
+  let detection: TextDetectionResult = container.config.interaction.respondToAllMessages
+    ? { isForJarvis: true, trigger: 'dev-all' }
+    : detectTextRequest(message, botUserId);
+
+  if (!detection.isForJarvis && container.config.interaction.indirectDetectionEnabled) {
+    const provider = container.providers.getLlmProvider(
+      container.config.interaction.indirectDetectionProvider,
+    );
+    detection = await detectIndirectRequest(message, provider, container.config.interaction.indirectDetectionModel);
+  }
+
   if (!detection.isForJarvis) return;
 
   const requestText = extractRequestText(message, botUserId);

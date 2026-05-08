@@ -31,16 +31,16 @@ export class XaiLlmProvider implements LlmProvider {
 
   async complete(
     messages: LlmMessage[],
-    opts?: { model?: string; temperature?: number; maxTokens?: number },
+    opts: { model: string; temperature?: number; maxTokens?: number },
   ): Promise<LlmResponse> {
-    const model = opts?.model ?? 'grok-3-mini';
+    const model = opts.model;
 
     const body: Record<string, unknown> = {
       model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     };
-    if (opts?.temperature !== undefined) body.temperature = opts.temperature;
-    if (opts?.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+    if (opts.temperature !== undefined) body.temperature = opts.temperature;
+    if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
 
     const res = await fetch(`${XAI_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -92,16 +92,14 @@ export class XaiEmbeddingProvider implements EmbeddingProvider {
     this.apiKey = apiKey;
   }
 
-  async embed(text: string, opts?: { model?: string }): Promise<EmbeddingResult> {
-    const model = opts?.model ?? 'v2';
-    const results = await this.callEmbeddingApi([text], model);
+  async embed(text: string, opts: { model: string }): Promise<EmbeddingResult> {
+    const results = await this.callEmbeddingApi([text], opts.model);
     return results[0];
   }
 
-  async embedBatch(texts: string[], opts?: { model?: string }): Promise<EmbeddingResult[]> {
+  async embedBatch(texts: string[], opts: { model: string }): Promise<EmbeddingResult[]> {
     if (texts.length === 0) return [];
-    const model = opts?.model ?? 'v2';
-    return this.callEmbeddingApi(texts, model);
+    return this.callEmbeddingApi(texts, opts.model);
   }
 
   private async callEmbeddingApi(input: string[], model: string): Promise<EmbeddingResult[]> {

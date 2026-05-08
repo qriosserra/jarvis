@@ -28,6 +28,7 @@ import type { ProviderRegistry } from './providers/router.js';
 import { validateProviderConfig } from './providers/validation.js';
 import { createXaiLlmProvider, createXaiEmbeddingProvider } from './providers/xai.js';
 import { createVoyageEmbeddingProvider } from './providers/voyage.js';
+import { createTavilyResearchProvider } from './providers/tavily.js';
 
 const logger = createLogger('bootstrap');
 
@@ -108,6 +109,12 @@ export async function bootstrap(): Promise<BootstrapResult> {
   if (config.secrets.voyageApiKey) {
     const voyageEmbedding = createVoyageEmbeddingProvider(config.secrets.voyageApiKey);
     registry.embedding.set('voyage', voyageEmbedding);
+  }
+
+  // Register Tavily research provider when configured
+  if (config.secrets.tavilyApiKey) {
+    const tavilyResearch = createTavilyResearchProvider(config.secrets.tavilyApiKey);
+    registry.research.set('tavily', tavilyResearch);
   }
 
   // Validate provider configuration (secrets for routed providers)

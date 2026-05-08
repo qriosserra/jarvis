@@ -83,13 +83,25 @@ export class ProviderRouter {
   }
 
   /** Resolve the LLM provider for a given task (interpretation or response). */
-  getLlm(task: 'interpretation' | 'response'): { provider: LlmProvider; model?: string } {
+  getLlm(task: 'interpretation' | 'response'): { provider: LlmProvider; model: string } {
     const route = this.getRoute(task);
     const provider = this.registry.llm.get(route.providerName);
     if (!provider) {
       throw new Error(`LLM provider "${route.providerName}" not registered for task "${task}"`);
     }
+    if (!route.model) {
+      throw new Error(`LLM model is required for task "${task}"`);
+    }
     return { provider, model: route.model };
+  }
+
+  /** Resolve a registered LLM provider by name, bypassing task routes. */
+  getLlmProvider(name: string): LlmProvider {
+    const provider = this.registry.llm.get(name);
+    if (!provider) {
+      throw new Error(`LLM provider "${name}" not registered`);
+    }
+    return provider;
   }
 
   /** Resolve the STT provider. */
@@ -123,11 +135,14 @@ export class ProviderRouter {
   }
 
   /** Resolve the embedding provider. */
-  getEmbedding(): { provider: EmbeddingProvider; model?: string } {
+  getEmbedding(): { provider: EmbeddingProvider; model: string } {
     const route = this.getRoute('embedding');
     const provider = this.registry.embedding.get(route.providerName);
     if (!provider) {
       throw new Error(`Embedding provider "${route.providerName}" not registered`);
+    }
+    if (!route.model) {
+      throw new Error('LLM model is required for embedding task');
     }
     return { provider, model: route.model };
   }

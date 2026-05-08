@@ -1,4 +1,6 @@
 import type { Persona } from '../db/types.js';
+import type { IntentKind } from '../interaction/intent.js';
+import type { ActionResult } from '../actions/types.js';
 
 // ── Intent interpretation prompt ────────────────────────────────────
 
@@ -41,17 +43,29 @@ Send a text message in a channel:
 - Use "respond" for general chat, greetings, opinions, or anything you can answer directly.
 - If the request is ambiguous about which action or target, use "ask-clarification".
 - The user may speak in any language. Classify intent regardless of language.
-- For spoken requests that ask to announce, post, or tell something in text: use "send-text-message" and omit channelRef to target the guild's default general text channel unless the user names a specific channel.`;
+- For spoken requests that ask to announce, post, or tell something in text: use "send-text-message" and omit channelRef to target the guild's default general text channel unless the user names a specific channel.
+- When the user clearly refers to themselves (e.g. "me", "moi", "myself", "yo", "ich", "je", "mi", etc.) as the target of an action, use the special reference "@self" for targetRef.`;
 
 /**
  * Build additional context for the interpretation prompt.
- * Includes persona name awareness and language hints.
+ * Includes persona name awareness, language hints, requester identity,
+ * and recent conversation history so the classifier can resolve indirect
+ * self-references (e.g. "mon prénom") and backward references.
  */
 export function buildInterpretationContext(
   persona: Persona | null,
   language?: string,
+  requesterName?: string | null,
+  recentHistory?: Array<{ requestText: string; responseText: string | null }>,
 ): string {
   const parts: string[] = [];
+
+  if (requesterName) {
+    parts.push(
+      `The user's known name is "${requesterName}". ` +
+      'When they refer to themselves indirectly (e.g. "my name", "mon prénom", "mi nombre"), use this value.',
+    );
+  }
 
   if (persona) {
     parts.push(
@@ -64,7 +78,23 @@ export function buildInterpretationContext(
     parts.push(`Detected user language: ${language}.`);
   }
 
-  return parts.join(' ');
+  const headerLine = parts.join(' ');
+
+  if (recentHistory && recentHistory.length > 0) {
+    const historyLines = recentHistory
+      .slice(-5)
+      .map((turn) => {
+        const user = `User: ${turn.requestText}`;
+        const jarvis = turn.responseText ? `\nJarvis: ${turn.responseText}` : '';
+        return user + jarvis;
+      })
+      .join('\n\n');
+
+    const historyBlock = `## Recent conversation\n${historyLines}`;
+    return headerLine ? `${headerLine}\n\n${historyBlock}` : historyBlock;
+  }
+
+  return headerLine;
 }
 
 // ── Response generation prompt ──────────────────────────────────────
@@ -108,10 +138,37 @@ export function buildResponseSystemPrompt(
   return parts.join('\n\n');
 }
 
+// ── Action outcome prompt ───────────────────────────────────────────
+
+/**
+ * Build a system-level context block describing what deterministic
+ * action just ran and how it ended. The response LLM uses this as
+ * factual grounding while phrasing the user-facing reply in the active
+ * persona's voice.
+ *
+ * Mirrors `buildResearchContext` — injects facts without replacing the
+ * original user request.
+ */
+export function buildActionOutcomeContext(
+  intentKind: IntentKind,
+  result: ActionResult,
+): string {
+  const status = result.success ? 'succeeded' : 'failed';
+  return (
+    'You just attempted a deterministic guild action on the user\'s behalf. ' +
+    'Acknowledge the outcome to the user in your own persona voice. ' +
+    'Stay faithful to the facts below — do not invent details, and if it failed, do not claim it succeeded.\n\n' +
+    `Action: ${intentKind}\n` +
+    `Status: ${status}\n` +
+    `Factual outcome action: ${result.message}`
+  );
+}
+
 // ── Research-augmented prompt ───────────────────────────────────────
 
 export function buildResearchContext(
   results: Array<{ title: string; url: string; snippet: string; content?: string }>,
+  opts?: { citations?: boolean },
 ): string {
   if (results.length === 0) return '';
 
@@ -123,9 +180,13 @@ export function buildResearchContext(
     })
     .join('\n\n');
 
+  const citationInstruction = opts?.citations
+    ? 'At the end of your response, list the sources you used under a "Sources:" heading, one per line as `- [title](url)`.'
+    : 'Cite sources when relevant.';
+
   return (
     'Use the following research results to inform your answer. ' +
-    'Cite sources when relevant.\n\n' +
+    citationInstruction + '\n\n' +
     entries
   );
 }

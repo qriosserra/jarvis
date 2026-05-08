@@ -141,6 +141,11 @@ describe('text flow — research-and-respond', () => {
     expect(ctx.sourceMessage!.reply).toHaveBeenCalledWith(
       expect.stringContaining('Node.js 22'),
     );
+
+    // The synthesis call must include the citation instruction
+    const synthMessages: Array<{ role: string; content: string }> = vi.mocked(llm.complete).mock.calls[1][0];
+    const systemContent = synthMessages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+    expect(systemContent).toContain('Sources:');
   });
 });
 
@@ -205,6 +210,89 @@ describe('text flow — deterministic action (rename)', () => {
     expect(ctx.sourceMessage!.reply).toHaveBeenCalledWith(
       expect.stringContaining('Ally'),
     );
+  });
+});
+
+describe('text flow — indirect self-reference rename', () => {
+  it('resolves indirect self-reference newName via requester identity in interpretation prompt', async () => {
+    // Stub identity alias lookup so selectBestName returns "Quentin"
+    container.repos.identityAliases.findByMember = vi.fn(async () => [
+      {
+        id: 'ia-1',
+        memberId: 'u1',
+        membershipId: null,
+        guildId: 'g1',
+        aliasType: 'first_name',
+        value: 'Quentin',
+        source: 'explicit',
+        confidence: 1,
+        confirmed: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]) as any;
+
+    // Interpretation LLM stub: assert the system prompt carries the
+    // requester's name, then return a rename intent that uses it.
+    const llm = stubLlmProvider({
+      complete: vi.fn(async (messages: any[]) => {
+        const systemContent = messages[0].content as string;
+        expect(systemContent).toContain('"Quentin"');
+        return {
+          content: '{"kind":"rename-member","targetRef":"@self","newName":"Quentin"}',
+          model: 'stub',
+        } satisfies LlmResponse;
+      }),
+    });
+
+    const requesterMember = {
+      id: 'u1',
+      displayName: 'TestUser',
+      user: { id: 'u1', username: 'testuser' },
+      voice: { channel: null },
+      roles: { highest: { position: 5 } },
+      permissions: { has: () => true },
+      setNickname: vi.fn(async () => {}),
+    };
+
+    const guild = {
+      id: 'g1',
+      ownerId: 'owner-id',
+      members: {
+        fetch: vi.fn(async (userId?: string) => {
+          if (userId === 'u1') return requesterMember;
+          if (!userId) return new Map();
+          throw new Error('not found');
+        }),
+        fetchMe: vi.fn(async () => ({
+          id: 'bot-user-id',
+          permissions: { has: () => true },
+          roles: { highest: { position: 100 } },
+        })),
+        cache: {
+          filter: vi.fn(() => ({
+            size: 1,
+            first: () => requesterMember,
+            values: () => [requesterMember],
+          })),
+        },
+      },
+      channels: { cache: { get: vi.fn(), find: vi.fn(), filter: vi.fn() } },
+    };
+
+    container.discord!.guilds.fetch = vi.fn(async () => guild) as any;
+    container.providers = stubProviderRouter({ llm });
+    setContainer(container);
+
+    const ctx = fakeInteractionContext({
+      requestText: 'remets mon prénom',
+      sourceMessage: { reply: vi.fn(async () => ({})) } as any,
+    });
+
+    await handleInteraction(ctx);
+
+    // Rename was applied with the resolved real name, not the literal phrase
+    expect(requesterMember.setNickname).toHaveBeenCalledWith('Quentin');
   });
 });
 
