@@ -1,5 +1,7 @@
 # Jarvis
 
+![Jarvis demonstration](img/jarvis-demonstration.gif)
+
 A Discord bot designed for interactions within a guild, supporting text and, soon, voice. Jarvis listens to messages, identifies the user’s intent using a language model (LLM), performs deterministic actions within the guild or generates conversational responses, and maintains a long-term semantic memory for each member.
 
 ## Documentation
